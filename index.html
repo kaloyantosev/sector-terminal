@@ -10,7 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=4" />
 </head>
 <body>
 
@@ -54,7 +54,8 @@
 
   <!-- SECTION NAVIGATION -->
   <nav class="section-nav">
-    <a href="#sec-strategy" class="nav-link">1. Daily 300/50 EMA + Smoothed RSI Strategy</a>
+    <a href="#sec-portfolio" class="nav-link">0. Sector Rotation Portfolio</a>
+    <a href="#sec-strategy" class="nav-link">1. Single-Sector Signal Chart</a>
     <a href="#sec-rotation" class="nav-link">2. Sector RRG Rotation Quadrant &amp; Leaders</a>
     <a href="#sec-coverage" class="nav-link">3. Index Universe &amp; Historical Depth</a>
     <a href="#sec-screener" class="nav-link">4. Full Sector Screener (All 210 Indexes)</a>
@@ -65,6 +66,75 @@
     <!-- =====================================================================
          SECTION 1 (HERO): DAILY 300/50 EMA + SMOOTHED RSI BUY & SELL STRATEGY
     ====================================================================== -->
+    <section id="sec-portfolio">
+      <div class="section-header">
+        <div>
+          <div class="section-title">
+            <span class="section-tag">ROTATION PORTFOLIO</span>
+            Catch the sector wave: buy every sector that triggers, hold until its own sell
+          </div>
+          <div class="section-subtitle" id="pf-subtitle">
+            Every close, all US sector ETFs are screened. A buy signal enters at the next close; same-day buys split the money equally.
+            Each position is held until that sector's own sell signal. One fund per sector. Idle cash earns T-bills.
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn-ghost active" id="pf-mode-cash" onclick="setPortfolioMode('cash')" title="New buys only use idle cash. When fully invested, new signals are skipped.">Cash only (your rule)</button>
+          <button class="btn-ghost" id="pf-mode-rebalance" onclick="setPortfolioMode('rebalance')" title="A new buy resizes all holdings to equal weight, so no signal is skipped.">Equal-weight on new buy</button>
+        </div>
+      </div>
+
+      <div class="grid-tv-split">
+        <div class="card" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="card-header" style="margin-bottom:0;">
+            <div>
+              <div class="card-title">Portfolio vs SPY (total return)</div>
+              <div class="section-subtitle" id="pf-range">--</div>
+            </div>
+            <span class="card-badge badge-cyan" id="pf-badge">--</span>
+          </div>
+          <div id="pf-banner" class="period-banner"></div>
+          <div class="stats-grid" id="pf-stats"></div>
+          <div class="period-facts" id="pf-facts"></div>
+          <div class="chart-box" style="height: 260px;"><canvas id="pfChart"></canvas></div>
+          <div>
+            <div class="card-title" style="font-size:12px;">Year by year vs SPY (click a year)</div>
+            <div class="years-strip" id="pf-years"></div>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Signals at the last close (fill at the next close)</div>
+              <span class="card-badge badge-amber" id="pf-pending-count">--</span>
+            </div>
+            <div class="table-wrap" style="max-height: 150px;">
+              <table class="quant-table" id="pf-pending"><thead><tr><th>Symbol</th><th>Sector</th><th>Signal</th><th>Action</th></tr></thead><tbody></tbody></table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Current holdings</div>
+              <span class="card-badge badge-emerald" id="pf-hold-count">--</span>
+            </div>
+            <div class="table-wrap" style="max-height: 200px;">
+              <table class="quant-table" id="pf-holdings"><thead><tr><th>Symbol</th><th>Sector</th><th>Since</th><th class="num">Weight</th><th class="num">Return</th></tr></thead><tbody></tbody></table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Rotation log (newest first, click to open the chart)</div>
+              <span class="card-badge badge-blue" id="pf-log-count">--</span>
+            </div>
+            <div class="table-wrap" style="max-height: 240px;">
+              <table class="quant-table" id="pf-log"><thead><tr><th>Fill date</th><th>Side</th><th>Symbol</th><th>Sector</th><th class="num">% of portfolio</th></tr></thead><tbody></tbody></table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="sec-strategy">
       <div class="section-header">
         <div>
@@ -508,7 +578,7 @@
     Data: Yahoo Finance. Not investment advice.
   </footer>
 
-  <script src="strategy.js"></script>
-  <script src="app.js"></script>
+  <script src="strategy.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

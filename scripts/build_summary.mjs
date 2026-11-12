@@ -31,6 +31,30 @@ for (const s of universe.sectors) {
 }
 
 writeFileSync(new URL("universe.json", DATA), JSON.stringify(universe));
+
+// Rotation portfolio: US-listed sector ETFs only. Indexes and futures cannot be bought as shown,
+// EUR-listed funds would mix currencies, and macro sleeves (bonds, VIX, crypto) are not sectors.
+// When two funds of one sector buy on the same day, the one with the longer history is taken.
+const eligible = universe.sectors
+  .filter(s => s.tradable && !s.category.startsWith("Macro") && !s.yf_symbol.includes("."))
+  .sort((a, b) => b.years - a.years || a.yf_symbol.localeCompare(b.yf_symbol));
+const members = eligible.map(s => ({ sym: s.yf_symbol, sector: s.sector, d: read(`daily/${s.file}`) }));
+const spy = read(`daily/${universe.sectors.find(s => s.yf_symbol === "SPY").file}`);
+const thin = v => Math.round(v * 1e4) / 1e4;
+const pf = {};
+for (const mode of ["cash", "rebalance"]) {
+  const p = S.portfolio(members, spy, irx, {}, { mode });
+  // daily points are only for the chart: keep about 1,500
+  const step = Math.max(1, Math.floor(p.dates.length / 1500));
+  const keep = (_, i) => i % step === 0 || i === p.dates.length - 1;
+  pf[mode] = { ...p, dates: p.dates.filter(keep), equity: p.equity.filter(keep).map(thin),
+               benchmark: p.benchmark.filter(keep).map(thin), held: p.held.filter(keep).map(h => h.n),
+               rf: undefined, years: p.years.map(({ from, to, ...y }) => y) };
+  console.log(`Portfolio (${mode}): ${p.start} → ${p.end}, CAGR ${p.stats.strategy.cagr.toFixed(1)}% vs SPY ` +
+    `${p.stats.benchmark.cagr.toFixed(1)}%, Sharpe ${p.stats.strategy.sharpe.toFixed(2)} vs ${p.stats.benchmark.sharpe.toFixed(2)}, ` +
+    `max DD ${p.stats.strategy.maxDrawdown.toFixed(1)}% vs ${p.stats.benchmark.maxDrawdown.toFixed(1)}%, ${p.trades.length} closed trades`);
+}
+writeFileSync(new URL("portfolio.json", DATA), JSON.stringify({ asOf: universe.asOf, members: eligible.length, ...pf }));
 const t = universe.sectors.filter(s => s.daily_cagr != null);
 const beat = k => t.filter(s => s[`daily_${k}`] > s[`daily_bh_${k}`]).length;
 console.log(`Backtested ${t.length}/${universe.sectors.length}. Strategy beats buy & hold on CAGR in ${beat("cagr")}, ` +

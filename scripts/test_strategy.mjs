@@ -43,3 +43,12 @@ const short = S.run({ dates: dates.slice(0, 500), open: close, high: close, low:
 assert.equal(short.stats.insufficient, true);
 
 console.log(`ok: ${res.trades.length} trades, ${res.stats.fills} fills`);
+
+// A one-member portfolio in cash mode is the single-symbol backtest.
+const pf = S.portfolio([{ sym: "X", sector: "X", d }], d, irx, {}, { mode: "cash", minMembers: 1 });
+assert.equal(pf.start, dates[S.WARMUP]);
+pf.equity.forEach((v, j) => assert.ok(Math.abs(v - res.equity_curve[S.WARMUP + j]) < 1e-6, `portfolio day ${j}`));
+// Two copies of one sector: only one is held.
+const two = S.portfolio([{ sym: "X", sector: "X", d }, { sym: "Y", sector: "X", d }], d, irx, {}, { mode: "rebalance", minMembers: 1 });
+assert.ok(two.log.filter(l => l.side === "BUY").every(l => l.sym === "X"));
+console.log("ok: portfolio");

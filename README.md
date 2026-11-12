@@ -1,6 +1,20 @@
 # Sector Daily Terminal: 300/50 EMA + smoothed RSI backtest
 
-A long-only daily trend strategy, backtested on 210 sector indexes, sector ETFs, and macro proxies against buy & hold of the same symbol:
+## The strategy: sector rotation
+
+Every close, all US-listed sector ETFs in the universe (about 140) are screened with the signal rules below.
+
+- A **buy** signal enters the sector at the next close. Buys on the same day split the money equally.
+- A position is held until **that sector's own sell** signal, then sold at the next close.
+- **One fund per sector**, so XLK, VGT and IYW buying together are one tech position. The fund with the longer history wins.
+- **Cash only** (default): new buys use idle cash only; when fully invested, new signals are skipped. **Equal-weight on new buy**: a new buy resizes all holdings to an equal share, so no signal is skipped.
+- Idle cash earns T-bills. The benchmark is SPY with dividends.
+
+Not in the rotation: price indexes and futures (not investable), EUR-listed STOXX funds (currency mismatch), and macro sleeves (bonds, VIX, dollar, crypto). The fund list is today's, so newer thematic ETFs carry survivorship bias.
+
+## The signal rules
+
+Each symbol is also backtested alone against buy & hold of the same symbol:
 
 - **Buy A:** price reclaims the 300-day EMA after a dip in which the smoothed RSI (200-day EMA of RSI 14) held above 50.
 - **Buy B:** price reclaims the 300-day and 50-day EMA after a dip in which the smoothed RSI broke 50.

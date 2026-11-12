@@ -13,6 +13,122 @@ let sortAsc = false;
 let coverageChart = null;
 let rrgChart = null;
 let equityChart = null;
+let pfChart = null;
+let PORTFOLIO = null;     // public/data/portfolio.json, one backtest per mode
+let PF_MODE = "cash";
+let PF_YEAR = null;       // selected year card, or null for the whole run
+
+function setPortfolioMode(mode) {
+  PF_MODE = mode; PF_YEAR = null;
+  document.getElementById("pf-mode-cash").classList.toggle("active", mode === "cash");
+  document.getElementById("pf-mode-rebalance").classList.toggle("active", mode === "rebalance");
+  renderPortfolio();
+}
+
+function selectPortfolioYear(y) {
+  PF_YEAR = y;
+  renderPortfolio();
+}
+
+function renderPortfolio() {
+  if (!PORTFOLIO) return;
+  const p = PORTFOLIO[PF_MODE];
+  const yr = PF_YEAR === null ? null : p.years.find(y => y.year === PF_YEAR);
+  const s = (yr || p.stats).strategy, b = (yr || p.stats).benchmark;
+  const tone = v => (v > 0 ? "pos" : v < 0 ? "neg" : "");
+  const sh = v => v.toFixed(2).replace("-", "−");
+  const multi = s.years >= 1.5;
+  const tile = (label, sv, bv, better, note) => `
+    <div class="stat">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value ${better === null ? "" : better ? "pos" : "neg"}">${sv}</div>
+      <div class="stat-bench">SPY ${bv}</div>
+      <div class="stat-note">${note}</div>
+    </div>`;
+
+  document.getElementById("pf-range").textContent =
+    `${p.start} → ${p.end} · ${PORTFOLIO.members} US sector ETFs screened daily · data to ${PORTFOLIO.asOf}`;
+  document.getElementById("pf-badge").textContent = PF_MODE === "cash" ? "CASH-ONLY BUYS" : "EQUAL-WEIGHT ON BUY";
+  document.getElementById("pf-banner").innerHTML = yr
+    ? `<b>${yr.year}${yr.partial ? " (year to date)" : ""}</b> · close to close, cut from the same run
+       <button class="btn-ghost" onclick="selectPortfolioYear(null)">← All years</button>`
+    : "";
+  document.getElementById("pf-stats").innerHTML =
+    tile("Return", fmtSigned(s.totalReturn), fmtSigned(b.totalReturn), s.totalReturn >= b.totalReturn,
+      yr ? `Close to close, ${yr.year}` : `$10,000 → $${Math.round(10000 * (1 + s.totalReturn / 100)).toLocaleString("en-US")}`) +
+    tile("CAGR", multi ? fmtSigned(s.cagr) : "–", multi ? fmtSigned(b.cagr) : "–", multi ? s.cagr >= b.cagr : null,
+      multi ? `Over ${s.years.toFixed(1)} years` : "Shown for periods over 1.5 years") +
+    tile("Max drawdown", fmtSigned(-s.maxDrawdown), fmtSigned(-b.maxDrawdown), s.maxDrawdown <= b.maxDrawdown, "Largest fall from a peak") +
+    tile("Volatility", `${s.volatility.toFixed(1)}%`, `${b.volatility.toFixed(1)}%`, s.volatility <= b.volatility, "Annualised, daily returns") +
+    tile("Sharpe ratio", sh(s.sharpe), sh(b.sharpe), s.sharpe >= b.sharpe, "Excess return over T-bills per unit of risk");
+
+  const wins = p.trades.filter(t => t.ret_pct > 0).length;
+  document.getElementById("pf-facts").innerHTML = [
+    `${p.trades.length} closed positions, ${p.trades.length ? Math.round(wins / p.trades.length * 100) : 0}% winners`,
+    `Invested ${p.exposure_pct.toFixed(0)}% of days, ${p.avg_holdings.toFixed(1)} sectors on average`,
+    `Now ${p.holdings.length} holdings, ${p.cash_pct.toFixed(0)}% cash`,
+    "0.10% cost per unit of turnover",
+  ].map(t => `<span>${t}</span>`).join("");
+
+  document.getElementById("pf-years").innerHTML = p.years.map(y => {
+    const sr = y.strategy.totalReturn, br = y.benchmark.totalReturn;
+    return `
+      <button class="year-card ${PF_YEAR === y.year ? "active" : ""}" onclick="selectPortfolioYear(${y.year})">
+        <span class="yc-year">${y.year}${y.partial ? "<small> YTD</small>" : ""}</span>
+        <span class="yc-row"><small>Rot.</small><b class="${tone(sr)}">${fmtSigned(sr, 0)}</b></span>
+        <span class="yc-row"><small>SPY</small><b>${fmtSigned(br, 0)}</b></span>
+        <span class="yc-row yc-ex"><small>Excess</small><b class="${tone(sr - br)}">${fmtSigned(sr - br, 0)}</b></span>
+      </button>`;
+  }).join("");
+
+  const pend = p.pending.filter(x => x.buy || x.held);
+  document.getElementById("pf-pending-count").textContent = `${pend.length} SIGNALS`;
+  document.querySelector("#pf-pending tbody").innerHTML = pend.length ? pend.map(x => `
+    <tr onclick="selectSector('${x.sym}', true)">
+      <td><span class="sym-pill">${x.sym}</span></td><td>${x.sector}</td><td>${x.kind}</td>
+      <td>${!x.buy ? '<span class="sig-badge-EXIT">SELL</span>'
+        : p.holdings.some(h => h.sector === x.sector) ? '<span style="color:var(--text-muted)">sector already held</span>'
+        : PF_MODE === "cash" && p.cash_pct < 0.1 ? '<span style="color:var(--text-muted)">skipped, no cash</span>'
+        : '<span class="sig-badge-A">BUY</span>'}</td>
+    </tr>`).join("") : '<tr><td colspan="4" style="color:var(--text-muted); text-align:center;">No buy or sell signal at the last close.</td></tr>';
+
+  document.getElementById("pf-hold-count").textContent = `${p.holdings.length} HELD`;
+  document.querySelector("#pf-holdings tbody").innerHTML = p.holdings.length ? p.holdings.map(h => `
+    <tr onclick="selectSector('${h.sym}', true)">
+      <td><span class="sym-pill">${h.sym}</span></td><td>${h.sector}</td>
+      <td style="font-family:var(--font-mono);">${h.entry_date}</td>
+      <td class="num">${h.weight.toFixed(1)}%</td><td class="num">${fmtPct(h.ret_pct)}</td>
+    </tr>`).join("") : '<tr><td colspan="5" style="color:var(--text-muted); text-align:center;">All in T-bills.</td></tr>';
+
+  const log = p.log.filter(l => !yr || l.date.startsWith(String(yr.year))).slice().reverse().slice(0, 400);
+  document.getElementById("pf-log-count").textContent = `${p.log.length} FILLS`;
+  document.querySelector("#pf-log tbody").innerHTML = log.map(l => `
+    <tr onclick="selectSector('${l.sym}', true)">
+      <td style="font-family:var(--font-mono);">${l.date}</td>
+      <td>${l.side === "BUY" ? '<span class="sig-badge-A">BUY</span>' : '<span class="sig-badge-EXIT">SELL</span>'}</td>
+      <td><span class="sym-pill">${l.sym}</span></td><td>${l.sector}</td><td class="num">${l.weight.toFixed(1)}%</td>
+    </tr>`).join("");
+
+  const ctx = document.getElementById("pfChart").getContext("2d");
+  if (pfChart) pfChart.destroy();
+  pfChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: p.dates,
+      datasets: [
+        { label: "Rotation portfolio (after costs)", data: p.equity, borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.08)", fill: true, borderWidth: 1.8, pointRadius: 0 },
+        { label: "SPY (total return)", data: p.benchmark, borderColor: "#627d98", borderWidth: 1.2, borderDash: [4, 4], pointRadius: 0 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+      plugins: { legend: { labels: { color: "#9fb3c8", font: { size: 10.5 } } },
+                 tooltip: { backgroundColor: "#0d1421", borderColor: "#2d466e", borderWidth: 1 } },
+      scales: { x: { grid: { display: false }, ticks: { color: "#627d98", maxTicksLimit: 8 } },
+                y: { type: "logarithmic", grid: { color: "rgba(30,45,71,0.4)" }, ticks: { color: "#9fb3c8" } } },
+    },
+  });
+}
 
 // TradingView Lightweight Charts instances
 let lwcPriceChart = null;
@@ -31,7 +147,7 @@ let RISK_FREE = null;          // ^IRX daily file
 let PERIOD = null;             // year card selected in the stats panel, or null for the whole run
 
 async function fetchJson(path) {
-  const resp = await fetch(DATA + path);
+  const resp = await fetch(DATA + path, { cache: "no-cache" }); // revalidate: data changes weekly
   if (!resp.ok) throw new Error(`${path}: HTTP ${resp.status}`);
   return resp.json();
 }
@@ -52,6 +168,8 @@ async function loadUniverse() {
     renderHeaderAndCoverage();
     populateCategoryFilter();
     renderScoreboard();
+    fetchJson("portfolio.json").then(p => { PORTFOLIO = p; renderPortfolio(); })
+      .catch(err => console.error("Failed to load portfolio:", err));
     applyFilters();
 
     const defaultSym = UNIVERSE_DATA.sectors.find(s => s.yf_symbol === reqSym)

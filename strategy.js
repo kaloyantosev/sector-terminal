@@ -285,5 +285,118 @@
     return res;
   }
 
-  return { WARMUP, MIN_BARS, DEFAULTS, indicators, rfDaily, periodStats, yearly, run };
+  // Sector rotation portfolio. Every close, each symbol's own signal engine (run) is checked:
+  //  - a BUY signal opens a position at the next close; buys on the same day share the money equally
+  //  - a position is held until that symbol's own SELL signal, then sold at the next close
+  //  - one position per sector label, so XLK, VGT and IYW buying together do not triple the tech bet
+  //  - mode "cash": new buys only use idle cash (sell proceeds, start capital); fully invested = no new buys
+  //  - mode "rebalance": a new buy resizes every holding to an equal share, so a new wave is never missed
+  // Idle cash earns T-bills. Costs are charged on every unit of turnover.
+  // members = [{sym, sector, d}], calendar = benchmark daily file {dates, close}.
+  function portfolio(members, calendar, irx, params, opts) {
+    const o = Object.assign({ mode: "cash", minMembers: 5 }, opts);
+    const P = Object.assign({}, DEFAULTS, params);
+    const cost = P.cost_bps / 1e4, cal = calendar.dates, n = cal.length;
+    const rf = rfDaily(cal, irx);
+
+    // Each member: its close as of every calendar day (forward-filled, null before it trades),
+    // the calendar day its first signal is allowed, and its signals keyed by fill day.
+    const fillsAt = Array.from({ length: n }, () => []);
+    const ready = new Array(n).fill(0);
+    const px = members.map((m, k) => {
+      const d = m.d, a = new Array(n).fill(null);
+      let j = -1;
+      for (let i = 0; i < n; i++) {
+        while (j + 1 < d.dates.length && d.dates[j + 1] <= cal[i]) j++;
+        if (j >= 0) a[i] = d.close[j];
+      }
+      if (d.dates.length < MIN_BARS) return a;
+      const firstOk = cal.findIndex(t => t >= d.dates[WARMUP]);
+      if (firstOk >= 0) for (let i = firstOk; i < n; i++) ready[i]++;
+      for (const s of run(d, P, irx).signals) {
+        let f = cal.findIndex(t => t > s.time); // next calendar close after the signal
+        if (f < 0) f = n; // signal on the last bar: fills tomorrow, reported as pending
+        if (f < n) fillsAt[f].push({ k, buy: s.kind.startsWith("BUY"), signal: s.time, kind: s.kind });
+        else fillsAt.pending = (fillsAt.pending || []).concat({ k, buy: s.kind.startsWith("BUY"), signal: s.time, kind: s.kind });
+      }
+      return a;
+    });
+
+    const start = ready.findIndex(c => c >= o.minMembers);
+    if (start < 0) return null;
+    let cash = 100;
+    const units = new Map(); // member index -> units held
+    const entry = new Map(); // member index -> {date, price, signal, kind}
+    const bySector = new Map(); // sector -> member index held
+    const eq = [], bh = [], rfs = [], held = [], trades = [], log = [];
+    const value = i => { let v = cash; for (const [k, u] of units) v += u * px[k][i]; return v; };
+
+    for (let i = start; i < n; i++) {
+      if (i > start) cash *= 1 + rf[i];
+      // sells first, so their cash can fund the same day's buys
+      for (const f of fillsAt[i]) {
+        if (f.buy || !units.has(f.k)) continue;
+        const p = px[f.k][i], e = entry.get(f.k), proceeds = units.get(f.k) * p * (1 - cost);
+        cash += proceeds;
+        trades.push({ sym: members[f.k].sym, sector: members[f.k].sector, entry_date: e.date, entry_kind: e.kind,
+                      exit_signal: f.signal, exit_date: cal[i], exit_kind: f.kind,
+                      ret_pct: ((p / e.price) * (1 - cost) * (1 - cost) - 1) * 100 });
+        log.push({ date: cal[i], side: "SELL", sym: members[f.k].sym, sector: members[f.k].sector, kind: f.kind, weight: proceeds / value(i) * 100 });
+        units.delete(f.k); entry.delete(f.k); bySector.delete(members[f.k].sector);
+      }
+      const buys = [];
+      for (const f of fillsAt[i]) {
+        const m = members[f.k];
+        if (!f.buy || units.has(f.k) || bySector.has(m.sector) || px[f.k][i] == null) continue;
+        if (buys.some(b => members[b.k].sector === m.sector)) continue; // first in universe order wins
+        buys.push(f);
+      }
+      if (buys.length) {
+        const total = value(i);
+        let budget = cash;
+        if (o.mode === "rebalance") {
+          const target = total / (units.size + buys.length);
+          for (const [k, u] of units) { // trim every holding down to the new equal share
+            const v = u * px[k][i], cut = Math.max(0, v - target);
+            units.set(k, u - cut / px[k][i]); cash += cut * (1 - cost);
+          }
+          budget = cash;
+        }
+        if (budget > total * 0.001) {
+          const each = budget / buys.length;
+          for (const f of buys) {
+            const p = px[f.k][i];
+            units.set(f.k, (each * (1 - cost)) / p); cash -= each;
+            entry.set(f.k, { date: cal[i], price: p, kind: f.kind });
+            bySector.set(members[f.k].sector, f.k);
+            log.push({ date: cal[i], side: "BUY", sym: members[f.k].sym, sector: members[f.k].sector, kind: f.kind, weight: each / total * 100 });
+          }
+        }
+      }
+      const v = value(i);
+      eq.push(v); bh.push((calendar.close[i] / calendar.close[start]) * 100); rfs.push(rf[i]);
+      held.push({ n: units.size, cash: (cash / v) * 100 });
+    }
+
+    const last = n - 1, vEnd = value(last);
+    const holdings = [...units].map(([k, u]) => {
+      const e = entry.get(k), p = px[k][last];
+      return { sym: members[k].sym, sector: members[k].sector, entry_date: e.date, entry_kind: e.kind,
+               weight: (u * p / vEnd) * 100, ret_pct: (p / e.price - 1) * 100 };
+    }).sort((a, b) => b.weight - a.weight);
+    const dates = cal.slice(start);
+    const res = { equity_curve: eq, bh_curve: bh, rf: rfs, warmup: 0 };
+    const pending = (fillsAt.pending || []).map(f => ({ sym: members[f.k].sym, sector: members[f.k].sector, kind: f.kind, buy: f.buy,
+                                                        held: units.has(f.k), signal: f.signal }));
+    return {
+      mode: o.mode, members: members.length, start: dates[0], end: dates[dates.length - 1],
+      dates, equity: eq, benchmark: bh, rf: rfs, held,
+      stats: periodStats(res, dates, 0, dates.length - 1), years: yearly(res, dates),
+      trades, log, holdings, pending, cash_pct: (cash / vEnd) * 100,
+      exposure_pct: (held.filter(h => h.n > 0).length / held.length) * 100,
+      avg_holdings: held.reduce((a, h) => a + h.n, 0) / held.length,
+    };
+  }
+
+  return { WARMUP, MIN_BARS, DEFAULTS, indicators, rfDaily, periodStats, yearly, run, portfolio };
 });

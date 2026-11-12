@@ -231,6 +231,7 @@ SECTOR_UNIVERSE = [
     # =========================================================================
     # 10. MACRO BENCHMARKS, COMMODITIES, RATES & DIGITAL ASSETS
     # =========================================================================
+    {"yf": "SPY", "tv": "AMEX:SPY", "tv_index": "SP:SPX", "name": "SPDR S&P 500 ETF (total return benchmark)", "sector": "Broad Market", "category": "Macro & Benchmark", "region": "US"},
     {"yf": "^GSPC", "tv": "SP:SPX", "tv_index": "SP:SPX", "name": "S&P 500 Benchmark Index", "sector": "Broad Market", "category": "Macro & Benchmark", "region": "US"},
     {"yf": "^NDX", "tv": "NASDAQ:NDX", "tv_index": "NASDAQ:NDX", "name": "NASDAQ 100 Index", "sector": "Large-Cap Growth", "category": "Macro & Benchmark", "region": "US"},
     {"yf": "^DJI", "tv": "DJ:DJI", "tv_index": "DJ:DJI", "name": "Dow Jones Industrial Average", "sector": "Blue Chip", "category": "Macro & Benchmark", "region": "US"},
