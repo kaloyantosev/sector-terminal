@@ -1,0 +1,7 @@
+__pycache__/
+.claude/
+legacy/
+daily_cache/
+sector_cache.json
+daily_summary.json
+graphify-out/

@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sector Daily Terminal | 300/50 EMA + smoothed RSI long-only backtest</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- TOP COMMAND BAR -->
+  <header class="top-command-bar">
+    <div class="brand-cluster">
+      <div class="brand-logo">SEC</div>
+      <div>
+        <div class="brand-title">
+          SECTOR DAILY STRATEGY TERMINAL
+          <span class="badge-live">BACKTEST · DAILY CLOSES · LONG ONLY</span>
+        </div>
+        <div class="brand-subtitle">Daily Close System: 300D EMA · 50D EMA · Smoothed RSI (200D EMA) + 50 Neutral · Momentum Sell &amp; Bounce Buy · No Shorts</div>
+      </div>
+    </div>
+
+    <div class="ticker-ribbon">
+      <div class="ticker-pill">
+        <span class="lbl">VERIFIED INDEXES</span>
+        <span class="val info" id="hdr-total-count">--</span>
+      </div>
+      <div class="ticker-pill">
+        <span class="lbl">20Y+ HISTORY</span>
+        <span class="val pos" id="hdr-20y-count">--</span>
+      </div>
+      <div class="ticker-pill">
+        <span class="lbl">S&amp;P 500 (1W)</span>
+        <span class="val" id="hdr-spx-close">--</span>
+        <span id="hdr-spx-1w">--</span>
+      </div>
+      <div class="ticker-pill">
+        <span class="lbl">ACTIVE SECTOR</span>
+        <span class="val info" id="hdr-active-sector">XLK</span>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <span class="brand-subtitle" id="last-sync-label">Loading cache...</span>
+    </div>
+  </header>
+
+  <!-- SECTION NAVIGATION -->
+  <nav class="section-nav">
+    <a href="#sec-strategy" class="nav-link">1. Daily 300/50 EMA + Smoothed RSI Strategy</a>
+    <a href="#sec-rotation" class="nav-link">2. Sector RRG Rotation Quadrant &amp; Leaders</a>
+    <a href="#sec-coverage" class="nav-link">3. Index Universe &amp; Historical Depth</a>
+    <a href="#sec-screener" class="nav-link">4. Full Sector Screener (All 210 Indexes)</a>
+  </nav>
+
+  <main class="terminal-container">
+
+    <!-- =====================================================================
+         SECTION 1 (HERO): DAILY 300/50 EMA + SMOOTHED RSI BUY & SELL STRATEGY
+    ====================================================================== -->
+    <section id="sec-strategy">
+      <div class="section-header">
+        <div>
+          <div class="section-title">
+            <span class="section-tag">DAILY 1D · BUY &amp; SELL</span>
+            <span id="strat-title">XLK — Technology Select Sector SPDR (Daily 1D)</span>
+          </div>
+          <div class="section-subtitle" id="strat-subtitle">
+            BUY A: &gt;300D EMA (RSI held &gt;50) · BUY B: &gt;300D &amp; 50D EMA (RSI broke &lt;50) · BOUNCE: Reclaim &gt;50D EMA · SELL 50: Cross &lt;50D EMA + Smoothed RSI↓ (no bull div) · SELL BOTH: &lt;300D &amp; 50D EMA
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn-ghost active" id="btn-chart-lwc" onclick="setChartMode('lwc')">Signal Chart (Buy &amp; Sell Markers)</button>
+          <button class="btn-ghost" id="btn-chart-tvw" onclick="setChartMode('tvw')">TradingView.com Widget (1D)</button>
+        </div>
+      </div>
+
+      <!-- TECH SECTOR QUICK SWITCHER -->
+      <div class="tech-quick-bar">
+        <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-right:4px;">TECH SECTOR UNIVERSE:</span>
+        <button class="btn-ghost active" data-sym="XLK" onclick="selectSector('XLK', false)">XLK (Tech SPDR 28Y)</button>
+        <button class="btn-ghost" data-sym="^XCI" onclick="selectSector('^XCI', false)">^XCI (Tech Index 43Y)</button>
+        <button class="btn-ghost" data-sym="^SOX" onclick="selectSector('^SOX', false)">^SOX (Semis 32.5Y)</button>
+        <button class="btn-ghost" data-sym="IGV" onclick="selectSector('IGV', false)">IGV (Software 25Y)</button>
+        <button class="btn-ghost" data-sym="SMH" onclick="selectSector('SMH', false)">SMH (Semis ETF 26Y)</button>
+        <button class="btn-ghost" data-sym="IYW" onclick="selectSector('IYW', false)">IYW (iShares Tech 26.5Y)</button>
+        <button class="btn-ghost" data-sym="VGT" onclick="selectSector('VGT', false)">VGT (Vanguard Tech 23Y)</button>
+        <button class="btn-ghost" data-sym="^IXCO" onclick="selectSector('^IXCO', false)">^IXCO (NASDAQ Comp 31Y)</button>
+        <button class="btn-ghost" data-sym="^NDXT" onclick="selectSector('^NDXT', false)">^NDXT (NDX Tech 21Y)</button>
+        <button class="btn-ghost" data-sym="EXV3.DE" onclick="selectSector('EXV3.DE', false)">EXV3.DE (EU STOXX Tech 19Y)</button>
+      </div>
+
+      <!-- STRATEGY TUNING & FAKEOUT DEVIATION CONTROLS -->
+      <div class="strategy-controls-bar">
+        <div class="ctrl-group">
+          <label for="param-dev">Fakeout EMA Dev %:</label>
+          <select id="param-dev" class="select-ctrl" onchange="refreshStrategy()">
+            <option value="0">0.0% (Exact Pierce)</option>
+            <option value="0.5">±0.5%</option>
+            <option value="1.0">±1.0%</option>
+            <option value="1.5" selected>±1.5% (default)</option>
+            <option value="2.0">±2.0%</option>
+            <option value="3.0">±3.0%</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label for="param-conf">Confirm Closes:</label>
+          <select id="param-conf" class="select-ctrl" onchange="refreshStrategy()">
+            <option value="1">1 Daily Close</option>
+            <option value="2">2 Daily Closes</option>
+            <option value="3" selected>3 Daily Closes (default)</option>
+            <option value="5">5 Daily Closes</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label for="param-slope">RSI Div Window:</label>
+          <select id="param-slope" class="select-ctrl" onchange="refreshStrategy()">
+            <option value="10">10D</option>
+            <option value="15" selected>15D</option>
+            <option value="20">20D</option>
+            <option value="30">30D</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label for="param-atr">50D ATR Guard:</label>
+          <select id="param-atr" class="select-ctrl" onchange="refreshStrategy()">
+            <option value="0">Off</option>
+            <option value="1.0">1.0× ATR</option>
+            <option value="1.5" selected>1.5× ATR (default)</option>
+            <option value="2.0">2.0× ATR (Strict)</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label for="param-rsidrop">RSI Peak Drop:</label>
+          <select id="param-rsidrop" class="select-ctrl" onchange="refreshStrategy()">
+            <option value="0">Any (&gt;0)</option>
+            <option value="1.0">≥ 1.0 pt</option>
+            <option value="1.5" selected>≥ 1.5 pts (default)</option>
+            <option value="2.0">≥ 2.0 pts (Strict)</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label for="param-cooldown">Bounce Cooldown:</label>
+          <select id="param-cooldown" class="select-ctrl" onchange="refreshStrategy()">
+            <option value="0">0D</option>
+            <option value="10">10D</option>
+            <option value="12" selected>12D (default)</option>
+            <option value="20">20D</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label for="param-rising">Climbing Buy:</label>
+          <select id="param-rising" class="select-ctrl" onchange="refreshStrategy()">
+            <option value="1" selected>ON</option>
+            <option value="0">OFF</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label for="param-cost">Cost / Fill:</label>
+          <select id="param-cost" class="select-ctrl" onchange="refreshStrategy()">
+            <option value="0">0%</option>
+            <option value="5">0.05%</option>
+            <option value="10" selected>0.10% (default)</option>
+            <option value="25">0.25%</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>Price Scale:</label>
+          <button class="btn-ghost active" id="btn-scale-log" onclick="setPriceScale('log')">Log</button>
+          <button class="btn-ghost" id="btn-scale-lin" onclick="setPriceScale('lin')">Linear</button>
+        </div>
+        <div class="ctrl-group" style="margin-left:auto;">
+          <button class="btn-ghost" onclick="zoomRecentYears(5)">Last 5Y</button>
+          <button class="btn-ghost" onclick="zoomRecentYears(10)">Last 10Y</button>
+          <button class="btn-ghost" onclick="resetChartZoom()">Full History</button>
+        </div>
+      </div>
+
+      <div class="grid-tv-split">
+        <!-- LEFT: TRADINGVIEW LIGHTWEIGHT CHARTS (DAILY CANDLES + 300/50 EMA + BUY & SELL SIGNALS + SMOOTHED RSI ONLY) -->
+        <div class="card" style="padding: 10px;">
+          <div id="lwc-wrapper" class="lwc-stack">
+            <div class="lwc-legend-row">
+              <div class="legend-items">
+                <span><strong class="sym-pill" id="leg-sym">XLK</strong> <span style="color:var(--text-muted);">1D</span></span>
+                <span><span class="leg-dot" style="background:#06b6d4;"></span>300D EMA: <strong id="leg-ema300">--</strong></span>
+                <span><span class="leg-dot" style="background:#f59e0b;"></span>50D EMA: <strong id="leg-ema50">--</strong></span>
+                <span style="color:var(--text-muted);">±Dev Band</span>
+                <span><span class="leg-dot" style="background:#facc15;"></span>Smoothed RSI (200D EMA): <strong id="leg-rsi-ema">--</strong></span>
+                <span style="color:var(--text-muted);">Neutral: 50.0</span>
+              </div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <span class="sig-badge-A">▲ BUY A/BOUNCE</span>
+                <span class="sig-badge-B">▲ BUY B</span>
+                <span class="sig-badge-EXIT">▼ SELL 50 / BOTH</span>
+              </div>
+            </div>
+            <div id="lwc_price_container" class="lwc-price-box"></div>
+            <div id="lwc_rsi_container" class="lwc-rsi-box"></div>
+          </div>
+
+          <!-- Optional Live TradingView.com Widget (1D) -->
+          <div id="tvw-wrapper" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:0 4px;">
+              <span class="card-title" style="font-size:13px;">TradingView.com Daily (1D) · <span class="sym-pill" id="tv-active-sym">AMEX:XLK</span></span>
+              <div style="display:flex; gap:6px;">
+                <button class="btn-ghost active" id="btn-tv-primary" onclick="setTvMode('primary')">Primary Feed</button>
+                <button class="btn-ghost" id="btn-tv-index" onclick="setTvMode('index')">Pure Index Feed</button>
+              </div>
+            </div>
+            <div id="tv_sector_container" class="tv-widget-box" style="height: 560px;"></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: STRATEGY PERFORMANCE + EQUITY CURVE + TRADE LOG -->
+        <div class="card" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="card-header" style="margin-bottom:0;">
+            <div>
+              <div class="card-title">Backtest vs Buy &amp; Hold (long only)</div>
+              <div class="section-subtitle" id="strat-rule-status">Status: --</div>
+            </div>
+            <span class="card-badge badge-emerald" id="strat-state-badge">--</span>
+          </div>
+
+          <div id="period-banner" class="period-banner"></div>
+          <div class="stats-grid" id="stats-grid"></div>
+          <div class="period-facts" id="period-facts"></div>
+
+          <div>
+            <div class="card-title" style="font-size:12px;">Year by year (click a year for its metrics and chart)</div>
+            <div class="section-subtitle">Every year is cut from the same continuous run and measured close to close.</div>
+            <div class="years-strip" id="years-strip"></div>
+          </div>
+
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span class="card-title" style="font-size:12px;">Strategy vs Buy &amp; Hold (log scale, both start at 100)</span>
+            </div>
+            <div class="chart-box" style="height: 155px;">
+              <canvas id="strategyEquityChart"></canvas>
+            </div>
+          </div>
+
+          <div>
+            <div class="card-title" style="font-size:12.5px; margin-bottom:6px;">Daily Buy &amp; Sell Trade Log (Click Any Row to Zoom Chart)</div>
+            <div class="table-wrap" style="max-height: 245px;">
+              <table class="quant-table" id="trade-log-table">
+                <thead>
+                  <tr>
+                    <th>Entry Fill</th>
+                    <th>Buy Type</th>
+                    <th class="num">Entry $</th>
+                    <th>Exit Fill</th>
+                    <th>Sell Type</th>
+                    <th class="num">Exit $</th>
+                    <th class="num">Net %</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         SECTION 2: RRG ROTATION QUADRANT & LEADERS/LAGGARDS
+    ====================================================================== -->
+    <section id="sec-rotation">
+      <div class="section-header">
+        <div>
+          <div class="section-title">
+            <span class="section-tag">SECTOR ROTATION</span>
+            Relative Rotation Quadrant (RS-Ratio vs RS-Momentum) &amp; Movers
+          </div>
+          <div class="section-subtitle">
+            Every sector plotted relative to S&amp;P 500 · Click any point or row to inspect its Daily 300/50 EMA + Smoothed RSI chart above
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-tv-split">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Sector Rotation Map</div>
+              <div class="section-subtitle">Top-Right = Leading, Bottom-Right = Weakening, Bottom-Left = Lagging, Top-Left = Improving</div>
+            </div>
+            <span class="card-badge badge-cyan">MANSFIELD RS QUADRANT</span>
+          </div>
+          <div class="chart-box-tall">
+            <canvas id="rrgChart"></canvas>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Top 8 Sector Leaders (Composite Score)</div>
+              <span class="card-badge badge-emerald">STRONGEST</span>
+            </div>
+            <div class="table-wrap" style="max-height: 195px;">
+              <table class="quant-table" id="leaders-table">
+                <thead>
+                  <tr><th>Symbol</th><th>Sector</th><th class="num">1W %</th><th class="num">13W %</th><th class="num">Score</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Bottom 8 Sector Laggards (Composite Score)</div>
+              <span class="card-badge badge-rose">WEAKEST</span>
+            </div>
+            <div class="table-wrap" style="max-height: 195px;">
+              <table class="quant-table" id="laggards-table">
+                <thead>
+                  <tr><th>Symbol</th><th>Sector</th><th class="num">1W %</th><th class="num">13W %</th><th class="num">Score</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         SECTION 3: UNIVERSE COVERAGE & HISTORICAL YEARS
+    ====================================================================== -->
+    <section id="sec-coverage">
+      <div class="section-header">
+        <div>
+          <div class="section-title">
+            <span class="section-tag">UNIVERSE COVERAGE</span>
+            Market Sector Index Universe (210 Verified) &amp; Historical Data Depth
+          </div>
+          <div class="section-subtitle">
+            Complete coverage across pure sector indexes, US GICS sectors, 55 sub-sectors, 19 EU STOXX 600 sectors, global &amp; thematic indexes
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-5" style="margin-bottom: 14px;">
+        <div class="kv-box" style="border-left: 3px solid var(--accent-cyan);">
+          <span class="k">Total Verified Symbols</span>
+          <div class="v info" id="cov-total">--</div>
+          <div class="sub" id="cov-failed">0 failed</div>
+        </div>
+        <div class="kv-box" style="border-left: 3px solid var(--accent-emerald);">
+          <span class="k">30+ Years Data</span>
+          <div class="v pos" id="cov-30y">--</div>
+          <div class="sub" id="cov-max-yrs">Max: --</div>
+        </div>
+        <div class="kv-box" style="border-left: 3px solid var(--accent-blue);">
+          <span class="k">25+ Years Data</span>
+          <div class="v" id="cov-25y">--</div>
+          <div class="sub">Back to 1998–2001</div>
+        </div>
+        <div class="kv-box" style="border-left: 3px solid var(--accent-indigo);">
+          <span class="k">20+ Years Data</span>
+          <div class="v" id="cov-20y">--</div>
+          <div class="sub" id="cov-median">Median: --</div>
+        </div>
+        <div class="kv-box" style="border-left: 3px solid var(--accent-amber);">
+          <span class="k">10+ Years Data</span>
+          <div class="v warn" id="cov-10y">--</div>
+          <div class="sub" id="cov-15y">15Y+: --</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Universe Breakdown by Category &amp; Data Span</div>
+              <div class="section-subtitle">Click any category row to filter the master screener below</div>
+            </div>
+            <span class="card-badge badge-cyan">14 CATEGORIES</span>
+          </div>
+          <div class="table-wrap" style="max-height: 330px;">
+            <table class="quant-table" id="category-summary-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th class="num">Count</th>
+                  <th>Earliest Date</th>
+                  <th class="num">Min Years</th>
+                  <th class="num">Max Years</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Historical Span (Max Years) &amp; Count by Category</div>
+              <div class="section-subtitle">How far back data goes across each market group</div>
+            </div>
+            <span class="card-badge badge-blue">DATA DEPTH</span>
+          </div>
+          <div class="chart-box" style="height: 330px;">
+            <canvas id="coverageChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         SECTION 4: MASTER SCREENER TABLE (ALL 210 INDEXES & ETFs)
+    ====================================================================== -->
+    <section id="sec-screener">
+      <div class="section-header">
+        <div>
+          <div class="section-title">
+            <span class="section-tag">MASTER SCREENER</span>
+            All 210 Market Sector Indexes — Daily 300/50 EMA + Smoothed RSI Strategy Matrix
+          </div>
+          <div class="section-subtitle">
+            Click any column header to sort · Click any row to load it into the strategy chart above · Paired columns show strategy / buy &amp; hold
+          </div>
+          <div class="scoreboard" id="scoreboard"></div>
+        </div>
+        <span class="card-badge badge-blue" id="screener-showing-count">Showing --</span>
+      </div>
+
+      <div class="card">
+        <div class="filter-bar">
+          <input type="text" id="filter-search" class="input-ctrl input-search" placeholder="Search symbol, sector, name (e.g. Tech, Real Estate, SOX, EXV1)..." oninput="applyFilters()" />
+          <select id="filter-category" class="select-ctrl" onchange="applyFilters()">
+            <option value="ALL">All Categories</option>
+          </select>
+          <select id="filter-region" class="select-ctrl" onchange="applyFilters()">
+            <option value="ALL">All Regions</option>
+            <option value="US">US</option>
+            <option value="Global">Global</option>
+            <option value="Europe">Europe</option>
+            <option value="Asia">Asia</option>
+            <option value="China">China</option>
+          </select>
+          <select id="filter-years" class="select-ctrl" onchange="applyFilters()">
+            <option value="0">Any History</option>
+            <option value="10">10+ Years</option>
+            <option value="15">15+ Years</option>
+            <option value="20">20+ Years</option>
+            <option value="25">25+ Years</option>
+            <option value="30">30+ Years</option>
+          </select>
+          <select id="filter-quadrant" class="select-ctrl" onchange="applyFilters()">
+            <option value="ALL">All RRG Quadrants</option>
+            <option value="Leading">Leading</option>
+            <option value="Improving">Improving</option>
+            <option value="Weakening">Weakening</option>
+            <option value="Lagging">Lagging</option>
+          </select>
+          <button class="btn-ghost" onclick="resetFilters()">Reset Filters</button>
+        </div>
+
+        <div class="table-wrap">
+          <table class="quant-table" id="master-screener-table">
+            <thead>
+              <tr>
+                <th onclick="sortBy('yf_symbol')">Ticker</th>
+                <th onclick="sortBy('name')">Name</th>
+                <th onclick="sortBy('sector')">Sector</th>
+                <th class="num" onclick="sortBy('years')">History</th>
+                <th class="num" onclick="sortBy('daily_close')">D Close</th>
+                <th class="num" onclick="sortBy('ret_1w')">1W %</th>
+                <th class="num" onclick="sortBy('ret_13w')">13W %</th>
+                <th class="num" onclick="sortBy('daily_ema50')">50D EMA</th>
+                <th class="num" onclick="sortBy('daily_ema300')">300D EMA</th>
+                <th class="num" onclick="sortBy('daily_rsi_ema200')">Smoothed RSI</th>
+                <th onclick="sortBy('daily_state')">Daily State</th>
+                <th class="num" onclick="sortBy('daily_trades')">Trades</th>
+                <th class="num" onclick="sortBy('daily_cagr')">CAGR / B&amp;H</th>
+                <th class="num" onclick="sortBy('daily_sharpe')">Sharpe / B&amp;H</th>
+                <th class="num" onclick="sortBy('daily_dd')">Max DD / B&amp;H</th>
+                <th onclick="sortBy('last_signal_date')">Last Signal</th>
+                <th onclick="sortBy('quadrant')">RRG</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="method-note">
+    <b>How it is tested.</b> Total-return prices (dividends reinvested) for ETFs; symbols tagged IDX are price indexes or continuous
+    futures and are not investable as shown. Signals use the day's close and fill at the <b>next</b> close, 0.10% cost per fill,
+    T-bills (^IRX) while flat. The first 600 bars only warm up the indicators; buy &amp; hold starts on the same bar as the strategy.
+    Sharpe is measured against T-bills. The default parameters were chosen on this same history, so treat every number as in-sample.
+    Data: Yahoo Finance. Not investment advice.
+  </footer>
+
+  <script src="strategy.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
