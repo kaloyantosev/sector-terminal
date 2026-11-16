@@ -2,7 +2,7 @@ const DATA = "https://raw.githubusercontent.com/kaloyantosev/sector-terminal/mai
 const H = Object.keys(HORIZONS);
 const $ = (id) => document.getElementById(id);
 const pct = (v, d = 2) => v == null || isNaN(v) ? "–" : `<span class="${v > 0 ? "pos" : v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v.toFixed(d)}%</span>`;
-let S, chart, current, tab = "chart", dir = "long";
+let S, chart, current, tab = "chart", dir = "long", EV = [], byWeek = new Map(), calYear, calWeek;
 
 function horizonTable(rows) { // rows: [label, statsByHorizon]
   const head = `<tr><th></th>${H.map((h) => `<th colspan="1">${h}</th>`).join("")}</tr>`;
@@ -85,6 +85,46 @@ async function select(s) {
       `<td>${e.stopDay === null ? "open" : e.stopDay + " d"}</td>${H.map((h) => `<td>${e[h] == null ? "–" : pct(e[h] * 100, 1)}</td>`).join("")}</tr>`).join("");
 }
 
+// ---- signal calendar: one button per ISO week, click shows every signal that week
+const DAY = 864e5;
+function isoWeek(ds) { // "YYYY-MM-DD" -> [ISO year, ISO week]
+  const d = new Date(ds + "T00:00:00Z"), thu = new Date(d.getTime() + (3 - (d.getUTCDay() + 6) % 7) * DAY);
+  const y = thu.getUTCFullYear();
+  return [y, Math.floor((thu - Date.UTC(y, 0, 1)) / DAY / 7) + 1];
+}
+function weekMonday(y, w) {
+  const jan4 = Date.UTC(y, 0, 4);
+  return new Date(jan4 - ((new Date(jan4).getUTCDay() + 6) % 7) * DAY + (w - 1) * 7 * DAY);
+}
+const md = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+
+function renderCal() {
+  const years = [...new Set(EV.map((e) => isoWeek(e[0])[0]))].sort((a, b) => b - a);
+  $("calYear").innerHTML = years.map((y) => `<option${y === calYear ? " selected" : ""}>${y}</option>`).join("");
+  const nW = isoWeek(`${calYear}-12-28`)[1];
+  let html = "", nL = 0, nS = 0;
+  for (let w = 1; w <= nW; w++) {
+    const list = byWeek.get(`${calYear}-${w}`) || [], L = list.filter((e) => e[2] === 1).length, Sh = list.length - L;
+    nL += L; nS += Sh;
+    html += `<button class="wk${w === calWeek ? " on" : ""}${list.length ? "" : " empty"}" data-w="${w}" aria-label="Week ${w}: ${L} long, ${Sh} short">` +
+      `<b>W${w}</b><span>${md(weekMonday(calYear, w))}</span><span><i class="pos">${L ? "▲" + L : ""}</i> <i class="neg">${Sh ? "▼" + Sh : ""}</i>${list.length ? "" : "–"}</span></button>`;
+  }
+  $("calGrid").innerHTML = html;
+  $("calInfo").textContent = `${calYear}: ${nL} long, ${nS} short signals`;
+  renderWeek();
+}
+
+function renderWeek() {
+  const list = byWeek.get(`${calYear}-${calWeek}`) || [], mon = weekMonday(calYear, calWeek);
+  $("weekTitle").textContent = `Week ${calWeek}, ${calYear} (${md(mon)} – ${md(new Date(mon.getTime() + 4 * DAY))}): ${list.length} signal${list.length === 1 ? "" : "s"}`;
+  $("weekTbl").innerHTML = list.length ? `<tr><th>Date</th><th>Symbol</th><th>Name</th><th>Category</th><th>Side</th>${H.map((h) => `<th>${h}</th>`).join("")}<th>Stopped after</th></tr>` +
+    list.map((e) => { const s = S.symbols[e[1]];
+      return `<tr data-f="${s.file}" title="Open chart"><td>${e[0]}</td><td>${s.tv || s.file}</td><td>${s.name}</td><td>${s.category}</td>` +
+        `<td class="${e[2] === 1 ? "pos" : "neg"}">${e[2] === 1 ? "long" : "short"}</td>${H.map((h, k) => `<td>${e[3 + k] == null ? "–" : pct(e[3 + k], 1)}</td>`).join("")}` +
+        `<td>${e[3 + H.length] == null ? "not stopped" : e[3 + H.length] + " d"}</td></tr>`; }).join("")
+    : `<tr><td class="muted">No signals this week.</td></tr>`;
+}
+
 function renderSummary() {
   const B = S[dir], name = dir === "long" ? "Longs" : "Shorts";
   $("kpis").innerHTML = [[`${name}: signals`, B.total_signals.toLocaleString()], ["Ever stopped", B.stopped_ever + "%"], ["Median days to stop", B.median_days_to_stop],
@@ -96,7 +136,19 @@ function renderSummary() {
 }
 
 (async () => {
-  S = await (await fetch("summary.json")).json();
+  [S, EV] = await Promise.all([fetch("summary.json").then((r) => r.json()), fetch("events.json").then((r) => r.json())]);
+  for (const e of EV) { const k = isoWeek(e[0]).join("-"); if (!byWeek.has(k)) byWeek.set(k, []); byWeek.get(k).push(e); }
+  [calYear, calWeek] = isoWeek(EV.at(-1)[0]);
+  renderCal();
+  $("calYear").addEventListener("change", (e) => { calYear = +e.target.value; calWeek = 1; renderCal(); });
+  const stepYear = (d) => { const ys = [...$("calYear").options].map((o) => +o.value); const i = ys.indexOf(calYear) - d;
+    if (i >= 0 && i < ys.length) { calYear = ys[i]; calWeek = 1; renderCal(); } };
+  $("calPrev").addEventListener("click", () => stepYear(-1));
+  $("calNext").addEventListener("click", () => stepYear(1));
+  $("calGrid").addEventListener("click", (e) => { const b = e.target.closest(".wk"); if (!b) return; calWeek = +b.dataset.w;
+    document.querySelectorAll(".wk").forEach((x) => x.classList.toggle("on", x === b)); renderWeek(); });
+  $("weekTbl").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-f]"); if (!tr) return;
+    select(S.symbols.find((s) => s.file === tr.dataset.f)); $("symTitle").scrollIntoView({ behavior: "smooth" }); });
   $("sub").textContent = `${S.symbols.length} symbols · ${S.long.total_signals.toLocaleString()} long + ${S.short.total_signals.toLocaleString()} short signals · ${S.first} to ${S.last} · data as of ${S.asOf}`;
   renderSummary();
   document.querySelectorAll("#dirTabs button").forEach((b) => b.addEventListener("click", () => {

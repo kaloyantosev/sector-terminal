@@ -33,7 +33,8 @@ const results = await Promise.all(list.map(async (s) => ({ s, ev: runStrategy(aw
 const a12 = (ev) => r2(mean(ev.filter((e) => e["12w"] != null).map((e) => e["12w"])) * 100, 2);
 const symbols = [], all = [];
 for (const { s, ev } of results) {
-  ev.forEach((e) => { e.category = s.category; all.push(e); });
+  const idx = symbols.length;
+  ev.forEach((e) => { e.category = s.category; e.sym = idx; all.push(e); });
   const L = ev.filter((e) => e.dir === "long"), Sh = ev.filter((e) => e.dir === "short");
   symbols.push({ file: s.file, tv: s.tv_symbol, name: s.name, category: s.category, nL: L.length, aL: a12(L), nS: Sh.length, aS: a12(Sh) });
 }
@@ -57,4 +58,9 @@ const dates = all.map((e) => e.date).sort();
 const summary = { asOf: uni.asOf, first: dates[0], last: dates.at(-1), total_signals: all.length,
   long: block(all.filter((e) => e.dir === "long")), short: block(all.filter((e) => e.dir === "short")), symbols };
 writeFileSync(new URL("./summary.json", import.meta.url), JSON.stringify(summary));
+// every signal for the calendar: [date, symbol index, +1 long / -1 short, return % per horizon (null = not yet), days to stop]
+const pctR = (x) => x == null ? null : Math.round(x * 1000) / 10;
+const events = all.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.sym - b.sym)
+  .map((e) => [e.date, e.sym, e.dir === "long" ? 1 : -1, ...Object.keys(HORIZONS).map((k) => pctR(e[k])), e.stopDay]);
+writeFileSync(new URL("./events.json", import.meta.url), JSON.stringify(events));
 console.log(`summary.json: ${symbols.length} symbols, ${summary.long.total_signals} long + ${summary.short.total_signals} short signals, data as of ${uni.asOf}`);
