@@ -2,7 +2,8 @@
 // Long: the HA candle broke below BOTH lines (any part of the HA body under both counts), and later the whole
 // HA body (open and close) is above both (entry). Short: the mirror. A one-candle cross of both lines counts.
 // A dip that never breaks the second line is not a signal.
-// Flat filter: no signal when the EMAs are within flatGap of each other AND the EMA 200 moved under flatSlope in 20 days.
+// Flat filter: no signal when the EMAs are within flatGap of each other today and on all of the previous flatDays,
+// AND the EMA 200 moved under flatSlope in 20 days. Lines that only meet briefly (V-recovery) do not block.
 const HORIZONS = { "1w": 5, "4w": 20, "8w": 40, "12w": 60, "16w": 80, "20w": 100 };
 const WARMUP = 300;
 
@@ -25,7 +26,7 @@ function haOpen(d, hc) {
 }
 
 // Decisions (EMAs and crosses) use Heikin Ashi closes. Entry fill, stop trigger and returns use real prices.
-function runStrategy(d, baseBuf = 0.02, gapMult = 1.0, flatGap = 0.01, flatSlope = 0.02) {
+function runStrategy(d, baseBuf = 0.02, gapMult = 1.0, flatGap = 0.01, flatSlope = 0.02, flatDays = 40) {
   const { open: o, high: h, low: l, close: c } = d;
   const hc = haClose(d), ho = haOpen(d, hc);
   const e200 = ema(hc, 200), e300 = ema(hc, 300);
@@ -42,7 +43,8 @@ function runStrategy(d, baseBuf = 0.02, gapMult = 1.0, flatGap = 0.01, flatSlope
     if (fire && s === 1) armLong = false;
     if (fire && s === -1) armShort = false;
     armLong = armLong || brokeDn(i); armShort = armShort || brokeUp(i);
-    const tangled = Math.abs(e200[i] - e300[i]) / Math.min(e200[i], e300[i]) < flatGap && Math.abs(e200[i] / e200[i - 20] - 1) < flatSlope;
+    let tangled = Math.abs(e200[i] / e200[i - 20] - 1) < flatSlope;
+    for (let k = i - flatDays; tangled && k <= i; k++) tangled = Math.abs(e200[k] - e300[k]) / Math.min(e200[k], e300[k]) < flatGap;
     if (fire && !tangled) {
       const long = s === 1, entry = c[i];
       const lower = Math.min(e200[i], e300[i]), upper = Math.max(e200[i], e300[i]);

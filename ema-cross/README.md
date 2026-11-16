@@ -8,7 +8,7 @@ Event study of one rule on every symbol in `public/data/daily/` (Yahoo Finance d
 - **Long:** the HA candle broke below both lines (any part of the HA body under both counts), then the whole HA body (open and close) is above both. Enter at that day's real close.
 - **Short:** the mirror.
 - A one-candle cross of both lines counts. A dip that never breaks the second line is not a signal.
-- **Flat filter:** no signal when the EMAs are tangled (within 1% of each other) and flat (EMA 200 moved under 2% in 20 days).
+- **Flat filter:** no signal when the EMAs are tangled (within 1% of each other today and on all of the previous 40 days) and flat (EMA 200 moved under 2% in 20 days). Lines that only meet briefly, as in a V-recovery, do not block a signal.
 - **Stop:** beyond the far line, buffer = 2% + the gap between the lines. Longs: lower EMA x (1 - buffer), hit on the daily low. Shorts: upper EMA x (1 + buffer), hit on the daily high. Fixed at entry; fills at the stop or the open if it gaps through.
 - No exit rule. Results are the return after 1, 4, 8, 12, 16 and 20 weeks, or the stop loss if hit first.
 - Skipped: `^IRX`, `^TNX`, `^VIX` (yields and volatility).
