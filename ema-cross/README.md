@@ -20,6 +20,7 @@ Event study of one rule on every symbol in `public/data/daily/` (Yahoo Finance d
 - `index.html`, `app.js`: the site. Per-symbol charts and trades load live from `public/data/daily/`.
 - `backtest/ema_200_300_test.py`: the same rule in Python, with a text report.
 - `tradingview/ema_200_300_ha_cross.pine`: the same rule as a TradingView indicator (paste into the Pine Editor, daily chart).
+- `tradingview/ema200_stretch_oscillator.pine`: oscillator of price stretch vs the EMA 200, coloured by how extreme it is for that symbol.
 
 ## Run
 

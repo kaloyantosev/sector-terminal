@@ -1,0 +1,49 @@
+//@version=5
+// EMA 200 stretch oscillator.
+// Stretch = how far price is from its EMA 200, in %: (price / EMA200 - 1) * 100.
+// Colour depth is relative to THIS symbol's own history: the column gets darker as the current stretch
+// becomes more extreme compared with the last N bars, so a calm index and a volatile stock are comparable.
+// Green above the EMA (light = mild, dark = extreme), red below (light = mild, dark = extreme).
+// Bands: the upper / lower percentile of stretch over the same history = this symbol's exhaustion zone.
+indicator("EMA 200 Stretch Oscillator", shorttitle = "Stretch 200", overlay = false, precision = 2, max_bars_back = 5000)
+
+len = input.int(200, "EMA length", minval = 2)
+useHA = input.bool(true, "Use Heikin Ashi close")
+lookback = input.int(2000, "History for colour and bands (bars)", minval = 100, maxval = 4900)
+hiPct = input.float(95, "Upper band percentile", minval = 50, maxval = 99.9)
+loPct = input.float(5, "Lower band percentile", minval = 0.1, maxval = 50)
+showFade = input.bool(true, "Mark turns inside the exhaustion zone")
+
+std = ticker.standard(syminfo.tickerid)
+haClose = request.security(ticker.heikinashi(std), timeframe.period, close)
+rawClose = request.security(std, timeframe.period, close)
+src = useHA ? haClose : rawClose
+
+ema200 = ta.ema(src, len)
+stretch = (src / ema200 - 1) * 100
+
+// how extreme today's stretch is versus this symbol's own history, 0 (mild) .. 100 (most extreme)
+rank = ta.percentrank(math.abs(stretch), lookback)
+upBand = ta.percentile_linear_interpolation(stretch, lookback, hiPct)
+dnBand = ta.percentile_linear_interpolation(stretch, lookback, loPct)
+
+greenLight = color.new(#b8f2c9, 0)
+greenDark = color.new(#0a6b37, 0)
+redLight = color.new(#ffc4c4, 0)
+redDark = color.new(#8c0a0a, 0)
+r = nz(rank, 50)
+col = stretch >= 0 ? color.from_gradient(r, 0, 100, greenLight, greenDark) : color.from_gradient(r, 0, 100, redLight, redDark)
+
+plot(stretch, "Stretch % vs EMA 200", col, style = plot.style_columns)
+plot(upBand, "Upper exhaustion band", color.new(color.green, 40), 1, plot.style_line)
+plot(dnBand, "Lower exhaustion band", color.new(color.red, 40), 1, plot.style_line)
+hline(0, "EMA 200", color.new(color.gray, 50), hline.style_dashed)
+
+// first down-tick while stretched above the upper band (longs tiring), and the mirror below the lower band
+fadeUp = showFade and stretch[1] >= upBand[1] and stretch < stretch[1] and stretch[2] <= stretch[1]
+fadeDn = showFade and stretch[1] <= dnBand[1] and stretch > stretch[1] and stretch[2] >= stretch[1]
+plotshape(fadeUp, "Upside stretch fading", shape.triangledown, location.top, color.new(color.green, 0), size = size.tiny)
+plotshape(fadeDn, "Downside stretch fading", shape.triangleup, location.bottom, color.new(color.red, 0), size = size.tiny)
+
+alertcondition(fadeUp, "Upside stretch fading", "{{ticker}}: stretch above EMA 200 is in the exhaustion zone and turning down")
+alertcondition(fadeDn, "Downside stretch fading", "{{ticker}}: stretch below EMA 200 is in the exhaustion zone and turning up")
