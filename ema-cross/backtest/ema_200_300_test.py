@@ -1,10 +1,10 @@
 """200/300 EMA staggered-cross event study on every symbol in sector-terminal's data. Longs and shorts.
 
 Decisions use Heikin Ashi closes (EMAs on HA close, crosses of HA close). Entry fills at the real close.
-Long entry (daily close): HA close was below BOTH EMA200 and EMA300, then closed above one of them, and on a
-later day closed above the other. A dip under one line followed by a reclaim of it (price never below both)
-is NOT a signal. A same-day cross of both lines is skipped.
-Short entry: the mirror. Price was above both, closed below one, later closed below the other.
+Long entry (daily close): the whole HA body (open and close) was below BOTH EMA200 and EMA300 and is now above
+both. A one-candle cross of both lines counts. A dip under one line followed by a reclaim of it (never below
+both) is NOT a signal. Short entry: the mirror, from above both to below both.
+(events(d, same_day=False, body=False) gives the older close-only, skip-same-day rule.)
 Stop: beyond the far line at entry (lower EMA for longs, upper EMA for shorts), with a buffer that widens with the gap:
     buffer = BASE_BUF + GAP_MULT * gap,   gap = (upper - lower) / lower
 Stop is fixed at entry and checked on each day's low (longs) / high (shorts); fill at stop, or at the open if it gaps through.
@@ -27,16 +27,24 @@ def ema(x, n):
     return pd.Series(x).ewm(span=n, adjust=False).mean().to_numpy()
 
 
-def events(d):
+def events(d, same_day=True, body=True):
+    """same_day: count a one-candle cross of both lines. body: the whole HA body (open and close) must be past both lines."""
     o, h, l, c = (np.asarray(d[k], float) for k in ("open", "high", "low", "close"))
     hc = (o + h + l + c) / 4  # Heikin Ashi close: decisions use it; fills, stops and returns use real prices
     e200, e300 = ema(hc, 200), ema(hc, 300)
-    side = np.where((hc > e200) & (hc > e300), 1, np.where((hc < e200) & (hc < e300), -1, 0))  # +1 above both, -1 below both
+    if body:
+        ho = np.empty_like(hc); ho[0] = (o[0] + c[0]) / 2
+        for k in range(1, len(c)):
+            ho[k] = (ho[k - 1] + hc[k - 1]) / 2  # Heikin Ashi open
+        lo_b, hi_b = np.minimum(ho, hc), np.maximum(ho, hc)
+    else:
+        lo_b = hi_b = hc
+    side = np.where((lo_b > e200) & (lo_b > e300), 1, np.where((hi_b < e200) & (hi_b < e300), -1, 0))  # +1 above both, -1 below both
     out = []
     last = side[WARMUP]
     for i in range(WARMUP + 1, len(c)):
         s = side[i]
-        if s != 0 and last == -s and side[i - 1] == 0:
+        if s != 0 and last == -s and (same_day or side[i - 1] == 0):
             long = s == 1
             entry = c[i]
             lower, upper = min(e200[i], e300[i]), max(e200[i], e300[i])
@@ -64,7 +72,7 @@ def events(d):
     return out
 
 
-def main(data_dir):
+def main(data_dir, **kw):
     uni = {s["file"]: s for s in json.load(open(os.path.join(data_dir, "universe.json")))["sectors"]}
     rows = []
     for f in sorted(os.listdir(os.path.join(data_dir, "daily"))):
@@ -72,7 +80,7 @@ def main(data_dir):
             continue
         d = json.load(open(os.path.join(data_dir, "daily", f)))
         meta = uni.get(f, {})
-        for r in events(d):
+        for r in events(d, **kw):
             r.update(symbol=f[:-5], tv=meta.get("tv_symbol"), category=meta.get("category", "?"))
             rows.append(r)
     df = pd.DataFrame(rows)

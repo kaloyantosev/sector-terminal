@@ -49,8 +49,8 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
   </aside>
   <section>
     <div class="box muted" style="font-size:13px">
-      <b style="color:var(--fg)">Rules.</b> Daily Heikin Ashi candles: the EMA 200 and EMA 300 are on the HA close, and every cross is the HA close crossing them. Entries fill at the real close; stops and returns use real prices. <b style="color:var(--fg)">Long:</b> price was below both lines, closes above one, and on a later day closes above the other; enter at that close.
-      <b style="color:var(--fg)">Short:</b> the mirror, from above both to below both. A dip under one line and a reclaim of it is not a signal; a same-day cross of both is skipped.
+      <b style="color:var(--fg)">Rules.</b> Daily Heikin Ashi candles, EMA 200 and EMA 300 on the HA close. <b style="color:var(--fg)">Long:</b> the whole HA candle body (open and close) was below both lines and is now above both; enter at that day's real close.
+      <b style="color:var(--fg)">Short:</b> the mirror, from above both to below both. A one-candle cross of both lines counts. A dip under one line and a reclaim of it is not a signal. Stops and returns use real prices.
       Stop = beyond the far line × (2% + EMA gap): lower EMA × (1 − buffer) for longs, upper EMA × (1 + buffer) for shorts. Fixed at entry, hit on the daily low (longs) or high (shorts).
       No exit rule: each column is the return if held that long, or the stop loss if hit first. Short returns are shown as the short's profit.
     </div>
@@ -61,7 +61,7 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
     <h2 id="symTitle">Symbol</h2>
     <div class="tabs"><button data-t="chart" class="on">Signal chart</button> <button data-t="tv">TradingView</button> <a id="tvlink" target="_blank" rel="noopener" style="margin-left:8px">Open on TradingView ↗</a></div>
     <div id="chart"></div><div id="tv" hidden></div>
-    <div class="legend"><span>━ Heikin Ashi close</span><span style="color:var(--e200)">━ EMA 200</span><span style="color:var(--e300)">━ EMA 300</span><span class="pos">▲ long entry</span><span class="neg">▼ short entry</span><span class="muted">● stop hit</span></div>
+    <div class="legend"><span>Heikin Ashi candles</span><span style="color:var(--e200)">━ EMA 200</span><span style="color:var(--e300)">━ EMA 300</span><span class="pos">▲ long entry</span><span class="neg">▼ short entry</span><span class="muted">● stop hit</span></div>
     <div class="wrap"><table id="symTbl"></table></div>
     <h2>Trades on this symbol</h2>
     <div class="wrap" style="max-height:360px;overflow:auto"><table id="trades"></table></div>

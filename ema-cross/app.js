@@ -32,7 +32,7 @@ function ensureChart() {
   const css = getComputedStyle(document.documentElement), v = (n) => css.getPropertyValue(n).trim();
   chart = LightweightCharts.createChart($("chart"), { autoSize: true, layout: { background: { color: v("--bg") }, textColor: v("--muted") },
     grid: { vertLines: { color: v("--line") }, horzLines: { color: v("--line") } }, rightPriceScale: { mode: 1 }, timeScale: { borderColor: v("--line") } });
-  chart.price = chart.addLineSeries({ color: v("--fg"), lineWidth: 1 });
+  chart.price = chart.addCandlestickSeries({ upColor: v("--pos"), downColor: v("--neg"), wickUpColor: v("--pos"), wickDownColor: v("--neg"), borderVisible: false });
   chart.e200 = chart.addLineSeries({ color: v("--e200"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
   chart.e300 = chart.addLineSeries({ color: v("--e300"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
   chart.colors = { pos: v("--pos"), neg: v("--neg"), muted: v("--muted") };
@@ -67,7 +67,8 @@ async function select(s) {
   const L = r.events.filter((e) => e.dir === "long"), Sh = r.events.filter((e) => e.dir === "short");
   $("symTbl").innerHTML = horizonTable([symStats(L), symStats(Sh)]).replace("Longs: undefined", "Longs").replace("Shorts: undefined", "Shorts");
   const pts = (arr) => d.dates.map((t, i) => ({ time: t, value: arr[i] }));
-  c.price.setData(pts(r.hc)); // Heikin Ashi close: the line the decisions use
+  c.price.setData(d.dates.map((t, i) => ({ time: t, open: r.ho[i], close: r.hc[i], // Heikin Ashi candles: what the decisions use
+    high: Math.max(d.high[i], r.ho[i], r.hc[i]), low: Math.min(d.low[i], r.ho[i], r.hc[i]) })));
   c.e200.setData(pts(r.e200).slice(200));
   c.e300.setData(pts(r.e300).slice(300));
   const marks = [];

@@ -1,0 +1,121 @@
+//@version=5
+// EMA 200/300 staggered cross on Heikin Ashi, longs and shorts. Same rules as ema-cross/strategy.js.
+// Add to a DAILY chart (normal candles or Heikin Ashi, both work: the script reads both series itself).
+// Long: HA was below both EMAs, then is above both (by default the whole HA body must clear both lines).
+// Short: the mirror. Entry at the real close. Stop beyond the far EMA with buffer = base % + gap between lines,
+// hit on the real low (longs) / high (shorts). No exit rule: the table shows the return after N weeks,
+// or the stop loss if it was hit first, averaged over every signal on this chart.
+indicator("EMA 200/300 HA cross: longs & shorts", overlay = true, max_labels_count = 500)
+
+useBody = input.bool(true, "Whole Heikin Ashi body must clear both EMAs")
+sameDay = input.bool(true, "Count a one-candle cross of both EMAs")
+baseBuf = input.float(2.0, "Stop: base buffer %", step = 0.5) / 100
+gapMult = input.float(1.0, "Stop: buffer x EMA gap", step = 0.25)
+
+std = ticker.standard(syminfo.tickerid)
+[o, h, l, c] = request.security(std, timeframe.period, [open, high, low, close])
+[hO, hC] = request.security(ticker.heikinashi(std), timeframe.period, [open, close])
+
+e200 = ta.ema(hC, 200)
+e300 = ta.ema(hC, 300)
+loB = useBody ? math.min(hO, hC) : hC
+hiB = useBody ? math.max(hO, hC) : hC
+side = loB > e200 and loB > e300 ? 1 : hiB < e200 and hiB < e300 ? -1 : 0  // +1 above both, -1 below both
+
+var int last = 0
+sig = bar_index > 300 and side != 0 and last == -side and (sameDay or side[1] == 0)
+if side != 0
+    last := side
+
+// ---- forward-return bookkeeping for every open signal
+hz = array.from(5, 20, 40, 60, 80, 100)  // trading days = 1, 4, 8, 12, 16, 20 weeks
+var evBar = array.new<int>()
+var evDir = array.new<int>()
+var evEntry = array.new<float>()
+var evStop = array.new<float>()
+var evStopAge = array.new<int>()
+var evStopRet = array.new<float>()
+var sumL = array.new<float>(6, 0.0)
+var cntL = array.new<int>(6, 0)
+var winL = array.new<int>(6, 0)
+var sumS = array.new<float>(6, 0.0)
+var cntS = array.new<int>(6, 0)
+var winS = array.new<int>(6, 0)
+var int nL = 0
+var int nS = 0
+
+rec(array<float> s_, array<int> n_, array<int> w_, int j, float r) =>
+    array.set(s_, j, array.get(s_, j) + r)
+    array.set(n_, j, array.get(n_, j) + 1)
+    array.set(w_, j, array.get(w_, j) + (r > 0 ? 1 : 0))
+    true
+
+stopHitL = false
+stopHitS = false
+if array.size(evBar) > 0
+    for k = array.size(evBar) - 1 to 0
+        age = bar_index - array.get(evBar, k)
+        d = array.get(evDir, k)
+        en = array.get(evEntry, k)
+        st = array.get(evStop, k)
+        sa = array.get(evStopAge, k)
+        if sa < 0 and age > 0 and (d == 1 ? l <= st : h >= st)
+            fill = d == 1 ? math.min(o, st) : math.max(o, st)
+            array.set(evStopAge, k, age)
+            array.set(evStopRet, k, d == 1 ? fill / en - 1 : 1 - fill / en)
+            sa := age
+            stopHitL := stopHitL or d == 1
+            stopHitS := stopHitS or d == -1
+        for j = 0 to 5
+            if age == array.get(hz, j)
+                r = sa >= 0 ? array.get(evStopRet, k) : (d == 1 ? c / en - 1 : 1 - c / en)
+                if d == 1
+                    rec(sumL, cntL, winL, j, r)
+                else
+                    rec(sumS, cntS, winS, j, r)
+        if age >= 100
+            array.remove(evBar, k)
+            array.remove(evDir, k)
+            array.remove(evEntry, k)
+            array.remove(evStop, k)
+            array.remove(evStopAge, k)
+            array.remove(evStopRet, k)
+
+if sig
+    lower = math.min(e200, e300)
+    upper = math.max(e200, e300)
+    buf = baseBuf + gapMult * (upper - lower) / lower
+    array.push(evBar, bar_index)
+    array.push(evDir, side)
+    array.push(evEntry, c)
+    array.push(evStop, side == 1 ? lower * (1 - buf) : upper * (1 + buf))
+    array.push(evStopAge, -1)
+    array.push(evStopRet, 0.0)
+    if side == 1
+        nL += 1
+    else
+        nS += 1
+
+plot(e200, "EMA 200 (HA close)", color.orange, 2)
+plot(e300, "EMA 300 (HA close)", color.purple, 2)
+plotshape(sig and side == 1, "Long", shape.triangleup, location.belowbar, color.green, size = size.small)
+plotshape(sig and side == -1, "Short", shape.triangledown, location.abovebar, color.red, size = size.small)
+plotshape(stopHitL, "Long stopped", shape.circle, location.belowbar, color.gray, size = size.tiny)
+plotshape(stopHitS, "Short stopped", shape.circle, location.abovebar, color.gray, size = size.tiny)
+
+// ---- results table: avg return % and % positive per holding period
+fmt(float s, int n) => n > 0 ? str.tostring(s / n * 100, "#.##") + "%" : "-"
+pctw(int w, int n) => n > 0 ? str.tostring(w * 100.0 / n, "#") + "%" : "-"
+var tb = table.new(position.top_right, 7, 5, bgcolor = color.new(color.black, 15), border_width = 1)
+if barstate.islast
+    table.cell(tb, 0, 0, "", text_color = color.white)
+    for j = 0 to 5
+        table.cell(tb, j + 1, 0, str.tostring(array.get(hz, j) / 5) + "w", text_color = color.white)
+        table.cell(tb, j + 1, 1, fmt(array.get(sumL, j), array.get(cntL, j)), text_color = color.lime)
+        table.cell(tb, j + 1, 2, pctw(array.get(winL, j), array.get(cntL, j)), text_color = color.lime)
+        table.cell(tb, j + 1, 3, fmt(array.get(sumS, j), array.get(cntS, j)), text_color = color.red)
+        table.cell(tb, j + 1, 4, pctw(array.get(winS, j), array.get(cntS, j)), text_color = color.red)
+    table.cell(tb, 0, 1, "Long avg (" + str.tostring(nL) + ")", text_color = color.lime)
+    table.cell(tb, 0, 2, "Long % pos", text_color = color.lime)
+    table.cell(tb, 0, 3, "Short avg (" + str.tostring(nS) + ")", text_color = color.red)
+    table.cell(tb, 0, 4, "Short % pos", text_color = color.red)
