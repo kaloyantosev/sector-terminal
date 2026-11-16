@@ -1,14 +1,14 @@
 //@version=5
 // EMA 200/300 staggered cross on Heikin Ashi, longs and shorts. Same rules as ema-cross/strategy.js.
 // Add to a DAILY chart (normal candles or Heikin Ashi, both work: the script reads both series itself).
-// Long: HA was below both EMAs, then is above both (by default the whole HA body must clear both lines).
-// Short: the mirror. Entry at the real close. Stop beyond the far EMA with buffer = base % + gap between lines,
+// Long: the HA candle broke below both EMAs (part of the HA body under both counts), then the whole HA body
+// is above both. Short: the mirror. No signal when the EMAs are flat and tangled (see inputs). Entry at the real close. Stop beyond the far EMA with buffer = base % + gap between lines,
 // hit on the real low (longs) / high (shorts). No exit rule: the table shows the return after N weeks,
 // or the stop loss if it was hit first, averaged over every signal on this chart.
 indicator("EMA 200/300 HA cross: longs & shorts", overlay = true, max_labels_count = 500)
 
-useBody = input.bool(true, "Whole Heikin Ashi body must clear both EMAs")
-sameDay = input.bool(true, "Count a one-candle cross of both EMAs")
+flatGap = input.float(1.0, "Flat filter: EMA gap under %", step = 0.25) / 100
+flatSlope = input.float(2.0, "Flat filter: EMA 200 moved under % in 20 days", step = 0.5) / 100
 baseBuf = input.float(2.0, "Stop: base buffer %", step = 0.5) / 100
 gapMult = input.float(1.0, "Stop: buffer x EMA gap", step = 0.25)
 
@@ -18,14 +18,23 @@ std = ticker.standard(syminfo.tickerid)
 
 e200 = ta.ema(hC, 200)
 e300 = ta.ema(hC, 300)
-loB = useBody ? math.min(hO, hC) : hC
-hiB = useBody ? math.max(hO, hC) : hC
-side = loB > e200 and loB > e300 ? 1 : hiB < e200 and hiB < e300 ? -1 : 0  // +1 above both, -1 below both
+loB = math.min(hO, hC)
+hiB = math.max(hO, hC)
+side = loB > e200 and loB > e300 ? 1 : hiB < e200 and hiB < e300 ? -1 : 0  // whole body above both / below both
+brokeDn = loB < e200 and loB < e300  // part of the body under both lines: arms a long
+brokeUp = hiB > e200 and hiB > e300  // part of the body over both lines: arms a short
+tangled = math.abs(e200 - e300) / math.min(e200, e300) < flatGap and math.abs(e200 / e200[20] - 1) < flatSlope
 
-var int last = 0
-sig = bar_index > 300 and side != 0 and last == -side and (sameDay or side[1] == 0)
-if side != 0
-    last := side
+var bool armLong = false
+var bool armShort = false
+fire = (side == 1 and armLong) or (side == -1 and armShort)
+if fire and side == 1
+    armLong := false
+if fire and side == -1
+    armShort := false
+armLong := armLong or brokeDn
+armShort := armShort or brokeUp
+sig = bar_index > 300 and fire and not tangled
 
 // ---- forward-return bookkeeping for every open signal
 hz = array.from(5, 20, 40, 60, 80, 100)  // trading days = 1, 4, 8, 12, 16, 20 weeks

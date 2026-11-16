@@ -1,10 +1,13 @@
 """200/300 EMA staggered-cross event study on every symbol in sector-terminal's data. Longs and shorts.
 
 Decisions use Heikin Ashi closes (EMAs on HA close, crosses of HA close). Entry fills at the real close.
-Long entry (daily close): the whole HA body (open and close) was below BOTH EMA200 and EMA300 and is now above
-both. A one-candle cross of both lines counts. A dip under one line followed by a reclaim of it (never below
-both) is NOT a signal. Short entry: the mirror, from above both to below both.
-(events(d, same_day=False, body=False) gives the older close-only, skip-same-day rule.)
+Long entry (daily close): the whole HA body (open and close) closes above BOTH EMA200 and EMA300, after the HA
+candle broke below both lines (any part of the HA body under both counts as a break, pierce="body"; with
+pierce="wick" the HA low is enough). A one-candle cross of both lines counts. A dip that never breaks the second
+line is NOT a signal. Short entry: the mirror.
+Flat filter: no signal when the EMAs are tangled (gap under 1%) AND flat (EMA 200 moved under 2% in 20 days).
+(pierce=None needs the whole body past both lines on the way in too; pierce=None, same_day=False, body=False
+gives the oldest close-only, skip-same-day rule.)
 Stop: beyond the far line at entry (lower EMA for longs, upper EMA for shorts), with a buffer that widens with the gap:
     buffer = BASE_BUF + GAP_MULT * gap,   gap = (upper - lower) / lower
 Stop is fixed at entry and checked on each day's low (longs) / high (shorts); fill at stop, or at the open if it gaps through.
@@ -21,30 +24,51 @@ BASE_BUF, GAP_MULT = 0.02, 1.0           # 2% base slippage + 1x the EMA gap
 HORIZONS = {"1w": 5, "4w": 20, "8w": 40, "12w": 60, "16w": 80, "20w": 100}
 SKIP = {"_IRX.json", "_TNX.json", "_VIX.json"}   # yields / volatility, not price trends
 WARMUP = 300
+FLAT_GAP, FLAT_SLOPE = 0.01, 0.02  # no signal if EMAs are within 1% AND EMA 200 moved under 2% in 20 days
 
 
 def ema(x, n):
     return pd.Series(x).ewm(span=n, adjust=False).mean().to_numpy()
 
 
-def events(d, same_day=True, body=True):
+def events(d, same_day=True, body=True, pierce="body", flat_gap=FLAT_GAP, flat_slope=FLAT_SLOPE):
     """same_day: count a one-candle cross of both lines. body: the whole HA body (open and close) must be past both lines."""
     o, h, l, c = (np.asarray(d[k], float) for k in ("open", "high", "low", "close"))
     hc = (o + h + l + c) / 4  # Heikin Ashi close: decisions use it; fills, stops and returns use real prices
     e200, e300 = ema(hc, 200), ema(hc, 300)
+    ho = np.empty_like(hc); ho[0] = (o[0] + c[0]) / 2
+    for k in range(1, len(c)):
+        ho[k] = (ho[k - 1] + hc[k - 1]) / 2  # Heikin Ashi open
     if body:
-        ho = np.empty_like(hc); ho[0] = (o[0] + c[0]) / 2
-        for k in range(1, len(c)):
-            ho[k] = (ho[k - 1] + hc[k - 1]) / 2  # Heikin Ashi open
         lo_b, hi_b = np.minimum(ho, hc), np.maximum(ho, hc)
     else:
         lo_b = hi_b = hc
+    # "broke below / above both lines": part of the HA body (or the HA wick) is past both
+    lo_p, hi_p = (np.minimum(l, lo_b), np.maximum(h, hi_b)) if pierce == "wick" else (lo_b, hi_b)
+    broke_dn = (lo_p < e200) & (lo_p < e300)
+    broke_up = (hi_p > e200) & (hi_p > e300)
     side = np.where((lo_b > e200) & (lo_b > e300), 1, np.where((hi_b < e200) & (hi_b < e300), -1, 0))  # +1 above both, -1 below both
     out = []
     last = side[WARMUP]
+    arm_long, arm_short = broke_dn[WARMUP], broke_up[WARMUP]  # pierce mode: a break of both lines arms the opposite entry
     for i in range(WARMUP + 1, len(c)):
         s = side[i]
-        if s != 0 and last == -s and (same_day or side[i - 1] == 0):
+        if pierce:
+            fire = (s == 1 and arm_long) or (s == -1 and arm_short)
+            if s == 1 and fire:
+                arm_long = False
+            if s == -1 and fire:
+                arm_short = False
+            arm_long, arm_short = arm_long or broke_dn[i], arm_short or broke_up[i]
+        else:
+            fire = s != 0 and last == -s and (same_day or side[i - 1] == 0)
+        if fire and flat_gap is not None:
+            # skip when the EMAs are tangled (gap under flat_gap) AND flat (EMA 200 moved under flat_slope in 20 days)
+            g = abs(e200[i] - e300[i]) / min(e200[i], e300[i])
+            sl = abs(e200[i] / e200[i - 20] - 1)
+            if g < flat_gap and sl < flat_slope:
+                fire = False
+        if fire:
             long = s == 1
             entry = c[i]
             lower, upper = min(e200[i], e300[i]), max(e200[i], e300[i])

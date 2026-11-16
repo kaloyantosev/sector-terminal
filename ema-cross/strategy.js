@@ -1,7 +1,8 @@
 // 200/300 EMA staggered cross. Same rules as ema_200_300_test.py.
-// Long: the whole Heikin Ashi body (open and close) was below BOTH lines and is now above both (entry).
-// Short: mirror, from above both to below both. A one-candle cross of both lines counts.
-// A dip under one line and a reclaim of it (never below both) is not a signal.
+// Long: the HA candle broke below BOTH lines (any part of the HA body under both counts), and later the whole
+// HA body (open and close) is above both (entry). Short: the mirror. A one-candle cross of both lines counts.
+// A dip that never breaks the second line is not a signal.
+// Flat filter: no signal when the EMAs are within flatGap of each other AND the EMA 200 moved under flatSlope in 20 days.
 const HORIZONS = { "1w": 5, "4w": 20, "8w": 40, "12w": 60, "16w": 80, "20w": 100 };
 const WARMUP = 300;
 
@@ -24,20 +25,25 @@ function haOpen(d, hc) {
 }
 
 // Decisions (EMAs and crosses) use Heikin Ashi closes. Entry fill, stop trigger and returns use real prices.
-function runStrategy(d, baseBuf = 0.02, gapMult = 1.0) {
+function runStrategy(d, baseBuf = 0.02, gapMult = 1.0, flatGap = 0.01, flatSlope = 0.02) {
   const { open: o, high: h, low: l, close: c } = d;
   const hc = haClose(d), ho = haOpen(d, hc);
   const e200 = ema(hc, 200), e300 = ema(hc, 300);
   // +1 whole HA body above both lines, -1 whole body below both, 0 otherwise
-  const side = (i) => {
-    const lo = Math.min(ho[i], hc[i]), hi = Math.max(ho[i], hc[i]);
-    return (lo > e200[i] && lo > e300[i]) ? 1 : (hi < e200[i] && hi < e300[i]) ? -1 : 0;
-  };
+  const lo = (i) => Math.min(ho[i], hc[i]), hi = (i) => Math.max(ho[i], hc[i]);
+  const side = (i) => (lo(i) > e200[i] && lo(i) > e300[i]) ? 1 : (hi(i) < e200[i] && hi(i) < e300[i]) ? -1 : 0;
+  // part of the HA body past both lines = a break; it arms the entry the other way
+  const brokeDn = (i) => lo(i) < e200[i] && lo(i) < e300[i], brokeUp = (i) => hi(i) > e200[i] && hi(i) > e300[i];
   const events = [];
-  let last = side(WARMUP) || 0; // last bar's "both" state (above both / below both)
+  let armLong = brokeDn(WARMUP), armShort = brokeUp(WARMUP);
   for (let i = WARMUP + 1; i < c.length; i++) {
     const s = side(i);
-    if (s !== 0 && last === -s) {
+    const fire = (s === 1 && armLong) || (s === -1 && armShort);
+    if (fire && s === 1) armLong = false;
+    if (fire && s === -1) armShort = false;
+    armLong = armLong || brokeDn(i); armShort = armShort || brokeUp(i);
+    const tangled = Math.abs(e200[i] - e300[i]) / Math.min(e200[i], e300[i]) < flatGap && Math.abs(e200[i] / e200[i - 20] - 1) < flatSlope;
+    if (fire && !tangled) {
       const long = s === 1, entry = c[i];
       const lower = Math.min(e200[i], e300[i]), upper = Math.max(e200[i], e300[i]);
       const gap = (upper - lower) / lower, buf = baseBuf + gapMult * gap;
@@ -55,7 +61,6 @@ function runStrategy(d, baseBuf = 0.02, gapMult = 1.0) {
       }
       events.push(ev);
     }
-    if (s !== 0) last = s;
   }
   return { e200, e300, hc, ho, events };
 }
