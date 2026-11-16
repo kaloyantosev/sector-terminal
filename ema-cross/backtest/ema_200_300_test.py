@@ -83,7 +83,7 @@ def events(d, same_day=True, body=True, pierce="body", flat_gap=FLAT_GAP, flat_s
                 if (l[j] <= stop) if long else (h[j] >= stop):
                     stop_day, stop_ret = j - i, ret(min(o[j], stop) if long else max(o[j], stop))
                     break
-            row = {"dir": "long" if long else "short", "date": d["dates"][i], "gap": gap, "risk": abs(stop / entry - 1),
+            row = {"dir": "long" if long else "short", "date": d["dates"][i], "entry": entry, "stop": stop, "gap": gap, "risk": abs(stop / entry - 1),
                    "stop_day": stop_day, "stop_ret": stop_ret}
             for name, n in HORIZONS.items():
                 if stop_day is not None and stop_day <= n:

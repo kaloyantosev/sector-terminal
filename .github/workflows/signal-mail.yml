@@ -1,0 +1,35 @@
+name: Daily signal mail
+
+# 10:00 Europe/Sofia on weekdays, covering the previous US session.
+# GitHub cron runs in UTC and has no daylight saving, so both UTC hours fire;
+# the script only sends from the one that is 10:00 in MAIL_TZ (07:00 UTC in summer, 08:00 UTC in winter).
+# GitHub may start scheduled runs some minutes late.
+on:
+  schedule:
+    - cron: '0 7 * * 1-5'
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch:  # "Run workflow" button: sends immediately
+
+permissions:
+  contents: read
+
+jobs:
+  mail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install yfinance pandas requests lxml
+      - run: python ema-cross/mailer/daily_signals.py
+        env:
+          SCHEDULE_CRON: ${{ github.event.schedule }}
+          MAIL_TZ: Europe/Sofia
+          MAIL_HOUR: '10'
+          LOOKBACK_SESSIONS: '1'
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
