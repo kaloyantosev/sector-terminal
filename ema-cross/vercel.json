@@ -1,0 +1,5 @@
+{
+  "installCommand": "echo no-install",
+  "buildCommand": "node build.mjs && mkdir -p public && cp index.html app.js strategy.js summary.json public/",
+  "outputDirectory": "public"
+}
