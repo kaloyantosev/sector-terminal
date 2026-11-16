@@ -183,15 +183,11 @@ def pick(pool, fallback, metrics, tier, n=5):
         df = df[(df["tier"] == tier) & df["yf"].isin(metrics.keys())].copy()
         df["relvol"] = df["yf"].map(lambda t: metrics[t]["relvol"])
         return df.sort_values("relvol", ascending=False).head(n)
-    best = top(pool)
+    best = top(pool).assign(fill=False)
     if len(best) < n:  # too few in the sub-industry for this cap tier: fill from the whole sector
-        extra = top(fallback[~fallback["yf"].isin(best["yf"])]).head(n - len(best))
+        extra = top(fallback[~fallback["yf"].isin(best["yf"])]).head(n - len(best)).assign(fill=True)
         best = extra if best.empty else pd.concat([best, extra])
     return best
-
-
-def fmt_money(x):
-    return f"${x / 1e9:.1f}B" if x >= 1e9 else f"${x / 1e6:.0f}M"
 
 
 def build_mail(sigs, newest, failed, groups, metrics):
@@ -199,55 +195,44 @@ def build_mail(sigs, newest, failed, groups, metrics):
     longs = [s for s in sigs if s["dir"] == "long"]
     shorts = [s for s in sigs if s["dir"] == "short"]
     subject = f"EMA 200/300 signals {newest}: {len(longs)} long, {len(shorts)} short"
-    th = 'style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;font-size:12px;color:#555"'
-    td = 'style="padding:4px 8px;border-bottom:1px solid #eee;font-size:13px"'
-    tdr = 'style="padding:4px 8px;border-bottom:1px solid #eee;font-size:13px;text-align:right"'
-    parts = [f'<div style="font-family:Segoe UI,Arial,sans-serif;color:#16181d;max-width:900px">',
-             f"<h2 style='margin:0 0 4px'>EMA 200/300 Heikin Ashi signals</h2>",
-             f"<p style='margin:0 0 12px;color:#555'>Session of {e(str(newest))}: {len(longs)} long, {len(shorts)} short. "
-             f"Entry would be at that close; the stop is fixed at entry. <a href='{SITE}'>Open the site</a>.</p>"]
+    th = 'style="text-align:left;padding:4px 10px;border-bottom:1px solid #ccc;font-size:12px;color:#555"'
+    td = 'style="padding:3px 10px;border-bottom:1px solid #eee;font-size:13px;vertical-align:top"'
+    parts = ['<div style="font-family:Segoe UI,Arial,sans-serif;color:#16181d;max-width:900px">',
+             f"<p style='margin:0 0 14px;color:#555'>Session of {e(str(newest))}: {len(longs)} long, {len(shorts)} short. "
+             f"<a href='{SITE}'>Open the site</a></p>"]
     if not sigs:
         parts.append("<p>No index gave a signal on the latest session.</p>")
-    else:
-        parts.append(f"<table style='border-collapse:collapse'><tr><th {th}>Date</th><th {th}>Side</th><th {th}>Index</th><th {th}>Name</th>"
-                     f"<th {th}>Category</th><th {th}>Close</th><th {th}>Stop</th><th {th}>Risk</th><th {th}>EMA gap</th></tr>")
-        for s in sorted(sigs, key=lambda s: (s["date"], s["dir"], s["category"], s["symbol"]), reverse=True):
-            col = "#0a7f4f" if s["dir"] == "long" else "#c0352b"
-            parts.append(f"<tr><td {td}>{s['date']}</td><td {td}><b style='color:{col}'>{s['dir'].upper()}</b></td><td {td}>{e(s['symbol'])}</td>"
-                         f"<td {td}>{e(s['name'])}</td><td {td}>{e(s['category'])}</td><td {tdr}>{s['entry']:.2f}</td>"
-                         f"<td {tdr}>{s['stop']:.2f}</td><td {tdr}>{s['risk'] * 100:.1f}%</td><td {tdr}>{s['gap'] * 100:.2f}%</td></tr>")
+    # one block per signal: side + index, then 5 large / 5 mid / 5 small cap stocks of that sector side by side
+    for s in sorted(sigs, key=lambda s: (s["dir"] != "long", s["symbol"])):
+        col = "#0a7f4f" if s["dir"] == "long" else "#c0352b"
+        parts.append(f"<h3 style='margin:20px 0 6px;font-size:16px'><span style='color:{col}'>{s['dir'].upper()} signal</span> "
+                     f"&nbsp;{e(s['symbol'])} <span style='font-weight:400;color:#555'>{e(s['name'])}</span></h3>")
+        g = groups.get(s["sector"])
+        if not g:
+            parts.append("<p style='margin:0;color:#777;font-size:13px'>No US stock list for this index (foreign benchmark, rates, crypto or volatility).</p>")
+            continue
+        picks = [g["picks"][tier] for _, tier in TIERS]
+        parts.append(f"<table style='border-collapse:collapse'><tr>{''.join(f'<th {th}>{lbl}</th>' for lbl, _ in TIERS)}</tr>")
+        for k in range(5):
+            cells = []
+            for best in picks:
+                if k < len(best):
+                    r = best.iloc[k]
+                    tag = " &middot; same sector" if r["fill"] else ""
+                    cells.append(f"<td {td}><b>{e(str(r['Symbol']))}</b> {e(str(r['Security']))} "
+                                 f"<span style='color:#888;font-size:11px'>{metrics[r['yf']]['relvol']:.1f}x vol{tag}</span></td>")
+                else:
+                    cells.append(f"<td {td}></td>")
+            parts.append(f"<tr>{''.join(cells)}</tr>")
         parts.append("</table>")
-    for key, g in groups.items():
-        names = ", ".join(f"{s['symbol']} ({s['dir']})" for s in g["sigs"])
-        gics, subs = SECTOR_MAP[key]
-        scope = "whole US market" if gics is None else gics + (f" / {', '.join(subs)}" if subs else "")
-        parts.append(f"<h3 style='margin:22px 0 4px'>{e(key)}</h3><p style='margin:0 0 6px;color:#555;font-size:13px'>"
-                     f"Signals: {e(names)}. Stocks from: {e(scope)}. Ranked by relative volume (last 10 sessions vs the 50 before).</p>")
-        for label, tier in TIERS:
-            best = g["picks"][tier]
-            parts.append(f"<p style='margin:10px 0 2px;font-weight:600;font-size:13px'>{label}</p>")
-            if best.empty:
-                parts.append("<p style='margin:0;color:#777;font-size:13px'>No liquid stocks in this group.</p>")
-                continue
-            parts.append(f"<table style='border-collapse:collapse'><tr><th {th}>Ticker</th><th {th}>Company</th><th {th}>Sub-industry</th>"
-                         f"<th {th}>Rel. volume</th><th {th}>Avg $ vol 10d</th><th {th}>Return 10d</th></tr>")
-            for _, r in best.iterrows():
-                m = metrics[r["yf"]]
-                rc = "#0a7f4f" if m["ret10"] >= 0 else "#c0352b"
-                parts.append(f"<tr><td {td}><b>{e(str(r['Symbol']))}</b></td><td {td}>{e(str(r['Security']))}</td>"
-                             f"<td {td}>{e(str(r['GICS Sub-Industry']))}</td><td {tdr}>{m['relvol']:.2f}x</td>"
-                             f"<td {tdr}>{fmt_money(m['dollar10'])}</td><td {tdr} ><span style='color:{rc}'>{m['ret10'] * 100:+.1f}%</span></td></tr>")
-            parts.append("</table>")
-    unmapped = sorted({s["symbol"] for s in sigs if s["sector"] not in SECTOR_MAP})
-    if unmapped:
-        parts.append(f"<p style='color:#777;font-size:12px;margin-top:18px'>No US stock list for: {e(', '.join(unmapped))} "
-                     "(foreign benchmark, rates, crypto or volatility).</p>")
     if failed:
         parts.append(f"<p style='color:#777;font-size:12px'>Could not load prices for: {e(', '.join(failed))}.</p>")
     parts.append("<p style='color:#777;font-size:12px;margin-top:18px'>Rules: daily Heikin Ashi, EMA 200/300 on the HA close; "
                  "long after a break below both lines once the whole HA body is above both (shorts mirrored); "
                  "no signal when the EMAs have been tangled within 1% for 40 days and are flat. "
-                 "Stocks: S&P 500 / 400 / 600 members by GICS, $2M+ daily dollar volume. Not investment advice.</p></div>")
+                 "Stocks: S&P 500 / 400 / 600 members of the sector (GICS), $2M+ daily dollar volume, ranked by volume of the last 10 sessions "
+                 "vs the 50 before (shown as 1.8x vol). 'same sector' = the sub-industry has fewer than 5 such stocks, filled from its sector. "
+                 "Not investment advice.</p></div>")
     return subject, "".join(parts)
 
 
