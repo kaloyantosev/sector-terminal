@@ -24,14 +24,15 @@ jobs:
       - run: node scripts/test_strategy.mjs
       - run: python scripts/update_data.py
       - run: node scripts/build_summary.mjs
+      - run: node ema-cross/build.mjs public/data  # EMA cross site data, served by GitHub Pages
       - name: Commit if changed
         run: |
-          if git diff --quiet public/data; then
+          if git diff --quiet public/data ema-cross; then
             echo "No new prices."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add public/data
+          git add public/data ema-cross/summary.json ema-cross/events.json
           git commit -m "data: prices to $(node -p "require('./public/data/universe.json').asOf")"
           git push
