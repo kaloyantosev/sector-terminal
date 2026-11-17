@@ -1,12 +1,101 @@
 <!doctype html>
 <html lang="en">
 <head>
+<base href="ema-cross/">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EMA 200/300 Cross</title>
-<meta http-equiv="refresh" content="0; url=ema-cross/">
-<link rel="canonical" href="ema-cross/">
+<style>
+:root { --bg:#fff; --fg:#16181d; --muted:#6b7280; --line:#e5e7eb; --card:#f8f9fb; --pos:#0a7f4f; --neg:#c0352b; --accent:#2f5bd3; --e200:#d98a00; --e300:#7a3fd1; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#0f1115; --fg:#e7e9ee; --muted:#9aa1ad; --line:#262a33; --card:#171a21; --pos:#3ccf8e; --neg:#ff6b5e; --accent:#7aa2ff; --e200:#f0b23c; --e300:#b38cff; } }
+:root[data-theme="dark"] { --bg:#0f1115; --fg:#e7e9ee; --muted:#9aa1ad; --line:#262a33; --card:#171a21; --pos:#3ccf8e; --neg:#ff6b5e; --accent:#7aa2ff; --e200:#f0b23c; --e300:#b38cff; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; }
+header { padding:20px 16px 8px; max-width:1300px; margin:auto; }
+h1 { font-size:20px; margin:0 0 4px; }
+h2 { font-size:15px; margin:24px 0 8px; }
+.muted { color:var(--muted); }
+main { max-width:1300px; margin:auto; padding:0 16px 40px; display:grid; grid-template-columns:300px 1fr; gap:20px; }
+main > section, main > aside { min-width:0; }  /* let wide tables scroll inside .wrap instead of widening the page */
+@media (max-width: 860px) { main { grid-template-columns:1fr; } #list { max-height:300px; } }
+#side input { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
+#list { max-height:calc(100vh - 140px); overflow:auto; margin-top:8px; border:1px solid var(--line); border-radius:8px; }
+.cat { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); padding:8px 10px 4px; background:var(--card); position:sticky; top:0; }
+.sym { display:flex; justify-content:space-between; gap:8px; padding:5px 10px; cursor:pointer; border-top:1px solid var(--line); }
+.sym:hover, .sym.on { background:var(--card); }
+.sym .n { font-variant-numeric:tabular-nums; font-size:12px; }
+.wrap { overflow-x:auto; }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+th, td { padding:5px 8px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+th:first-child, td:first-child { text-align:left; }
+th { font-weight:600; color:var(--muted); font-size:12px; }
+.pos { color:var(--pos); } .neg { color:var(--neg); }
+.tabs button { border:1px solid var(--line); background:var(--card); color:var(--fg); padding:5px 10px; border-radius:6px; cursor:pointer; }
+.tabs button.on { border-color:var(--accent); color:var(--accent); }
+#chart, #tv { height:460px; border:1px solid var(--line); border-radius:8px; margin-top:8px; }
+.legend { font-size:12px; margin-top:6px; } .legend span { margin-right:14px; }
+.box { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+.kpis b { display:block; font-size:18px; }
+.calbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+.calbar select, .calbar button { border:1px solid var(--line); background:var(--card); color:var(--fg); padding:5px 8px; border-radius:6px; font:inherit; cursor:pointer; }
+#calGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:6px; }
+.wk { display:flex; flex-direction:column; align-items:flex-start; gap:1px; border:1px solid var(--line); background:var(--card); color:var(--fg); padding:5px 7px; border-radius:6px; cursor:pointer; font:inherit; font-size:12px; text-align:left; }
+.wk span { color:var(--muted); font-size:11px; }
+.wk i { font-style:normal; font-variant-numeric:tabular-nums; }
+.wk.empty { opacity:.45; }
+.wk.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+.wk:focus-visible, .calbar button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+#weekTbl td:nth-child(-n+4), #weekTbl th:nth-child(-n+4) { text-align:left; }
+#weekTbl tr[data-f] { cursor:pointer; }
+#weekTbl tr[data-f]:hover { background:var(--card); }
+</style>
 </head>
 <body>
-<p><a href="ema-cross/">EMA 200/300 cross site</a> · <a href="classic.html">previous sector terminal</a></p>
+<header>
+  <h1>EMA 200/300 staggered cross: longs and shorts</h1>
+  <div class="muted" id="sub">Loading…</div>
+</header>
+<main>
+  <aside id="side">
+    <input id="q" placeholder="Filter symbols…" aria-label="Filter symbols">
+    <div id="list"></div>
+  </aside>
+  <section>
+    <div class="box muted" style="font-size:13px">
+      <b style="color:var(--fg)">Rules.</b> Daily Heikin Ashi candles, EMA 200 and EMA 300 on the HA close. <b style="color:var(--fg)">Long:</b> the HA candle broke below both lines, then the whole HA body (open and close) is above both; enter at that day's real close.
+      <b style="color:var(--fg)">Short:</b> the mirror, from above both to below both. A one-candle cross of both lines counts. Part of the HA body past the second line counts as a break of it; a dip that never breaks the second line is not a signal.
+      No signal when the EMAs are flat and tangled: within 1% of each other today and for all of the previous 40 days, and the EMA 200 moved under 2% in 20 days. Lines that only meet briefly, as in a V-recovery, do not block a signal. Stops and returns use real prices.
+      Stop = beyond the far line × (2% + EMA gap): lower EMA × (1 − buffer) for longs, upper EMA × (1 + buffer) for shorts. Fixed at entry, hit on the daily low (longs) or high (shorts).
+      No exit rule: each column is the return if held that long, or the stop loss if hit first. Short returns are shown as the short's profit.
+    </div>
+    <h2>All symbols</h2>
+    <div class="tabs" id="dirTabs" style="margin-bottom:10px"><button data-d="long" class="on">Longs</button> <button data-d="short">Shorts</button></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="wrap"><table id="allTbl"></table></div>
+    <h2>Signal calendar</h2>
+    <div class="calbar"><label class="muted" for="calYear">Year</label> <select id="calYear"></select>
+      <button id="calPrev" aria-label="Previous year">◀</button> <button id="calNext" aria-label="Next year">▶</button>
+      <span class="muted" id="calInfo"></span></div>
+    <div id="calGrid"></div>
+    <h2 id="weekTitle" style="margin-top:14px">Week</h2>
+    <div class="wrap" style="max-height:420px;overflow:auto"><table id="weekTbl"></table></div>
+    <h2 id="symTitle">Symbol</h2>
+    <div class="tabs"><button data-t="chart" class="on">Signal chart</button> <button data-t="tv">TradingView</button> <a id="tvlink" target="_blank" rel="noopener" style="margin-left:8px">Open on TradingView ↗</a></div>
+    <div id="chart"></div><div id="tv" hidden></div>
+    <div class="legend"><span>Heikin Ashi candles</span><span style="color:var(--e200)">━ EMA 200</span><span style="color:var(--e300)">━ EMA 300</span><span class="pos">▲ long entry</span><span class="neg">▼ short entry</span><span class="muted">● stop hit</span></div>
+    <div class="wrap"><table id="symTbl"></table></div>
+    <h2>Trades on this symbol</h2>
+    <div class="wrap" style="max-height:360px;overflow:auto"><table id="trades"></table></div>
+    <h2>By category</h2>
+    <div class="wrap"><table id="catTbl"></table></div>
+    <h2>By EMA gap at entry</h2>
+    <div class="wrap"><table id="gapTbl"></table></div>
+    <p class="muted" style="font-size:12px;margin-top:24px">Daily OHLC from Yahoo Finance (total return for ETFs), loaded live from the sector-terminal repo, which refreshes weekly. TradingView has no public data API, so the TradingView tab is its chart widget only. No costs included. Today's ETF list, so survivorship bias. Not investment advice.</p>
+  </section>
+</main>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="strategy.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

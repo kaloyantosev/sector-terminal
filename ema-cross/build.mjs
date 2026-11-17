@@ -63,4 +63,10 @@ const pctR = (x) => x == null ? null : Math.round(x * 1000) / 10;
 const events = all.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.sym - b.sym)
   .map((e) => [e.date, e.sym, e.dir === "long" ? 1 : -1, ...Object.keys(HORIZONS).map((k) => pctR(e[k])), e.stopDay]);
 writeFileSync(new URL("./events.json", import.meta.url), JSON.stringify(events));
+// GitHub Pages serves the repo root: write the same page there, its scripts and data resolving to ema-cross/
+if (SRC) {
+  const page = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  if (!page.includes("<head>")) throw new Error("index.html has no <head>");
+  writeFileSync(new URL("../index.html", import.meta.url), page.replace("<head>", '<head>\n<base href="ema-cross/">'));
+}
 console.log(`summary.json: ${symbols.length} symbols, ${summary.long.total_signals} long + ${summary.short.total_signals} short signals, data as of ${uni.asOf}`);
