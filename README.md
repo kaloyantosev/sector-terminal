@@ -1,5 +1,7 @@
 # Sector Daily Terminal: 300/50 EMA + smoothed RSI backtest
 
+> The site's main page is now the EMA 200/300 Heikin Ashi cross study in [`ema-cross/`](ema-cross/). The terminal described below lives at `classic.html`.
+
 ## The strategy: sector rotation
 
 Every close, all US-listed sector ETFs in the universe (about 140) are screened with the signal rules below.
