@@ -14,10 +14,12 @@ hiPct = input.float(95, "Upper band percentile", minval = 50, maxval = 99.9)
 loPct = input.float(5, "Lower band percentile", minval = 0.1, maxval = 50)
 showFade = input.bool(true, "Mark turns inside the exhaustion zone")
 
-std = ticker.standard(syminfo.tickerid)
-haClose = request.security(ticker.heikinashi(std), timeframe.period, close)
-rawClose = request.security(std, timeframe.period, close)
-src = useHA ? haClose : rawClose
+adjDiv = input.bool(true, "Dividend-adjusted prices (set the same as the chart's ADJ button)")
+
+// ticker.standard() would drop the chart's dividend adjustment; request the adjustment explicitly
+tk = ticker.new(syminfo.prefix, syminfo.ticker, syminfo.session, adjDiv ? adjustment.dividends : adjustment.splits)
+[o, h, l, c] = request.security(tk, timeframe.period, [open, high, low, close])
+src = useHA ? (o + h + l + c) / 4 : c  // Heikin Ashi close = (o+h+l+c)/4
 
 ema200 = ta.ema(src, len)
 stretch = (src / ema200 - 1) * 100

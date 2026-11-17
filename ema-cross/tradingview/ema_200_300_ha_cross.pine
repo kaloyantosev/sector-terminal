@@ -1,6 +1,7 @@
 //@version=5
 // EMA 200/300 staggered cross on Heikin Ashi, longs and shorts. Same rules as ema-cross/strategy.js.
-// Add to a DAILY chart (normal candles or Heikin Ashi, both work: the script reads both series itself).
+// Add to a DAILY chart (normal candles or Heikin Ashi, both work: the script builds Heikin Ashi itself).
+// Keep the "Dividend-adjusted" input the same as the chart's ADJ button, or the lines sit off the candles.
 // Long: the HA candle broke below both EMAs (part of the HA body under both counts), then the whole HA body
 // is above both. Short: the mirror. No signal when the EMAs are flat and have been tangled for 40+ days (see inputs). Entry at the real close. Stop beyond the far EMA with buffer = base % + gap between lines,
 // hit on the real low (longs) / high (shorts). No exit rule: the table shows the return after N weeks,
@@ -13,9 +14,16 @@ flatDays = input.int(40, "Flat filter: EMAs tangled for at least N days", minval
 baseBuf = input.float(2.0, "Stop: base buffer %", step = 0.5) / 100
 gapMult = input.float(1.0, "Stop: buffer x EMA gap", step = 0.25)
 
-std = ticker.standard(syminfo.tickerid)
-[o, h, l, c] = request.security(std, timeframe.period, [open, high, low, close])
-[hO, hC] = request.security(ticker.heikinashi(std), timeframe.period, [open, close])
+adjDiv = input.bool(true, "Dividend-adjusted prices (set the same as the chart's ADJ button)")
+
+// Standard candles of this symbol with the chosen adjustment. ticker.standard() would drop the chart's
+// dividend adjustment, so the EMAs drifted away from an adjusted chart further back in time.
+src = ticker.new(syminfo.prefix, syminfo.ticker, syminfo.session, adjDiv ? adjustment.dividends : adjustment.splits)
+[o, h, l, c] = request.security(src, timeframe.period, [open, high, low, close])
+// Heikin Ashi built here from those candles, the same way as the website and the Python backtest
+hC = (o + h + l + c) / 4
+var float hO = na
+hO := na(hO[1]) ? (o + c) / 2 : (hO[1] + hC[1]) / 2
 
 e200 = ta.ema(hC, 200)
 e300 = ta.ema(hC, 300)
