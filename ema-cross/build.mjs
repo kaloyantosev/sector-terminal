@@ -27,8 +27,17 @@ function stats(ev) {
 }
 const quantile = (s, q) => { const p = (s.length - 1) * q, lo = Math.floor(p); return s[lo] + (s[Math.ceil(p)] - s[lo]) * (p - lo); };
 
+// One index per industry (same rule as representatives() in backtest/ema_200_300_test.py): longest history wins
+const ALIASES = { "Technology": "Information Technology", "Energy / Oil & Gas": "Energy", "Europe Financials": "Financials",
+  "REITs": "Real Estate", "Real Estate ex-US": "Real Estate", "Housing / Real Estate": "Homebuilders" };
 const uni = await load("universe.json");
-const list = uni.sectors.filter((s) => !SKIP.has(s.file));
+const best = new Map();
+for (const s of uni.sectors) {
+  if (SKIP.has(s.file)) continue;
+  const key = (s.category.startsWith("Macro") ? s.category : "equity") + "|" + (ALIASES[s.sector] ?? s.sector);
+  if (!best.has(key) || s.start_date < best.get(key).start_date) best.set(key, s);
+}
+const list = [...best.values()];
 const results = await Promise.all(list.map(async (s) => ({ s, ev: runStrategy(await load("daily/" + s.file)).events })));
 const a12 = (ev) => r2(mean(ev.filter((e) => e["12w"] != null).map((e) => e["12w"])) * 100, 2);
 const symbols = [], all = [];

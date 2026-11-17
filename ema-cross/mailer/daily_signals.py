@@ -115,7 +115,7 @@ def should_send_now():
 
 def index_signals(lookback):
     uni = json.load(open(ROOT / "public" / "data" / "universe.json", encoding="utf8"))["sectors"]
-    items = [s for s in uni if s["file"] not in strat.SKIP]
+    items = strat.representatives(uni)  # one index per industry
 
     def run(s):
         df = fetch(s["yf_symbol"])

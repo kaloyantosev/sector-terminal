@@ -25,6 +25,21 @@ BASE_BUF, GAP_MULT = 0.02, 1.0           # 2% base slippage + 1x the EMA gap
 HORIZONS = {"1w": 5, "4w": 20, "8w": 40, "12w": 60, "16w": 80, "20w": 100}
 SKIP = {"_IRX.json", "_TNX.json", "_VIX.json"}   # yields / volatility, not price trends
 WARMUP = 300
+# One index per industry: XLV, VHT, IYH, FHLC... give near-identical signals. Names that mean the same industry:
+ALIASES = {"Technology": "Information Technology", "Energy / Oil & Gas": "Energy", "Europe Financials": "Financials",
+           "REITs": "Real Estate", "Real Estate ex-US": "Real Estate", "Housing / Real Estate": "Homebuilders"}
+
+
+def representatives(sectors):
+    """Keep one index per industry (commodities, rates and crypto apart from stocks): the one with the longest history."""
+    best = {}
+    for s in sectors:
+        if s["file"] in SKIP:
+            continue
+        key = (s["category"] if s["category"].startswith("Macro") else "equity", ALIASES.get(s["sector"], s["sector"]))
+        if key not in best or s["start_date"] < best[key]["start_date"]:
+            best[key] = s
+    return list(best.values())
 FLAT_GAP, FLAT_SLOPE, FLAT_DAYS = 0.002, 0.02, 40  # no signal if EMAs within 0.2% (today and all of the last 40 days) AND EMA 200 moved under 2% in 20 days
 
 
@@ -99,13 +114,11 @@ def events(d, same_day=True, body=True, pierce="body", flat_gap=FLAT_GAP, flat_s
 
 
 def main(data_dir, **kw):
-    uni = {s["file"]: s for s in json.load(open(os.path.join(data_dir, "universe.json")))["sectors"]}
+    reps = representatives(json.load(open(os.path.join(data_dir, "universe.json")))["sectors"])
     rows = []
-    for f in sorted(os.listdir(os.path.join(data_dir, "daily"))):
-        if f in SKIP:
-            continue
+    for meta in sorted(reps, key=lambda s: s["file"]):
+        f = meta["file"]
         d = json.load(open(os.path.join(data_dir, "daily", f)))
-        meta = uni.get(f, {})
         for r in events(d, **kw):
             r.update(symbol=f[:-5], tv=meta.get("tv_symbol"), category=meta.get("category", "?"))
             rows.append(r)

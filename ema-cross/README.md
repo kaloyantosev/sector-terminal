@@ -12,6 +12,7 @@ Event study of one rule on every symbol in `public/data/daily/` (Yahoo Finance d
 - **Stop:** beyond the far line, buffer = 2% + the gap between the lines. Longs: lower EMA x (1 - buffer), hit on the daily low. Shorts: upper EMA x (1 + buffer), hit on the daily high. Fixed at entry; fills at the stop or the open if it gaps through.
 - No exit rule. Results are the return after 1, 4, 8, 12, 16 and 20 weeks, or the stop loss if hit first.
 - Skipped: `^IRX`, `^TNX`, `^VIX` (yields and volatility).
+- **One index per industry:** funds tracking the same industry (XLV, VHT, IYH, FHLC... for health care) count once; the one with the longest history is kept. 100 industries out of 209 symbols.
 
 ## Files
 
