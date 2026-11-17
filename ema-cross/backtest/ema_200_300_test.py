@@ -5,7 +5,7 @@ Long entry (daily close): the whole HA body (open and close) closes above BOTH E
 candle broke below both lines (any part of the HA body under both counts as a break, pierce="body"; with
 pierce="wick" the HA low is enough). A one-candle cross of both lines counts. A dip that never breaks the second
 line is NOT a signal. Short entry: the mirror.
-Flat filter: no signal when the EMAs are tangled (gap under 1% today and on all of the previous 40 days) AND flat
+Flat filter: no signal when the EMAs are tangled (gap under 0.2% today and on all of the previous 40 days) AND flat
 (EMA 200 moved under 2% in 20 days). Lines that only meet briefly, e.g. in a V-recovery, do not block a signal.
 (pierce=None needs the whole body past both lines on the way in too; pierce=None, same_day=False, body=False
 gives the oldest close-only, skip-same-day rule.)
@@ -25,7 +25,7 @@ BASE_BUF, GAP_MULT = 0.02, 1.0           # 2% base slippage + 1x the EMA gap
 HORIZONS = {"1w": 5, "4w": 20, "8w": 40, "12w": 60, "16w": 80, "20w": 100}
 SKIP = {"_IRX.json", "_TNX.json", "_VIX.json"}   # yields / volatility, not price trends
 WARMUP = 300
-FLAT_GAP, FLAT_SLOPE, FLAT_DAYS = 0.01, 0.02, 40  # no signal if EMAs within 1% (today and all of the last 40 days) AND EMA 200 moved under 2% in 20 days
+FLAT_GAP, FLAT_SLOPE, FLAT_DAYS = 0.002, 0.02, 40  # no signal if EMAs within 0.2% (today and all of the last 40 days) AND EMA 200 moved under 2% in 20 days
 
 
 def ema(x, n):

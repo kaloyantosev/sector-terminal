@@ -26,7 +26,7 @@ function haOpen(d, hc) {
 }
 
 // Decisions (EMAs and crosses) use Heikin Ashi closes. Entry fill, stop trigger and returns use real prices.
-function runStrategy(d, baseBuf = 0.02, gapMult = 1.0, flatGap = 0.01, flatSlope = 0.02, flatDays = 40) {
+function runStrategy(d, baseBuf = 0.02, gapMult = 1.0, flatGap = 0.002, flatSlope = 0.02, flatDays = 40) {
   const { open: o, high: h, low: l, close: c } = d;
   const hc = haClose(d), ho = haOpen(d, hc);
   const e200 = ema(hc, 200), e300 = ema(hc, 300);

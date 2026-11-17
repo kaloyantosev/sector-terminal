@@ -65,7 +65,7 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
     <div class="box muted" style="font-size:13px">
       <b style="color:var(--fg)">Rules.</b> Daily Heikin Ashi candles, EMA 200 and EMA 300 on the HA close. <b style="color:var(--fg)">Long:</b> the HA candle broke below both lines, then the whole HA body (open and close) is above both; enter at that day's real close.
       <b style="color:var(--fg)">Short:</b> the mirror, from above both to below both. A one-candle cross of both lines counts. Part of the HA body past the second line counts as a break of it; a dip that never breaks the second line is not a signal.
-      No signal when the EMAs are flat and tangled: within 1% of each other today and for all of the previous 40 days, and the EMA 200 moved under 2% in 20 days. Lines that only meet briefly, as in a V-recovery, do not block a signal. Stops and returns use real prices.
+      No signal when the EMAs are flat and tangled: within 0.2% of each other today and for all of the previous 40 days, and the EMA 200 moved under 2% in 20 days. Lines that only meet briefly, as in a V-recovery, do not block a signal. Stops and returns use real prices.
       Stop = beyond the far line × (2% + EMA gap): lower EMA × (1 − buffer) for longs, upper EMA × (1 + buffer) for shorts. Fixed at entry, hit on the daily low (longs) or high (shorts).
       No exit rule: each column is the return if held that long, or the stop loss if hit first. Short returns are shown as the short's profit.
     </div>

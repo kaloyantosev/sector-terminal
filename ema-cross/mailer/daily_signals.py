@@ -229,7 +229,7 @@ def build_mail(sigs, newest, failed, groups, metrics):
         parts.append(f"<p style='color:#777;font-size:12px'>Could not load prices for: {e(', '.join(failed))}.</p>")
     parts.append("<p style='color:#777;font-size:12px;margin-top:18px'>Rules: daily Heikin Ashi, EMA 200/300 on the HA close; "
                  "long after a break below both lines once the whole HA body is above both (shorts mirrored); "
-                 "no signal when the EMAs have been tangled within 1% for 40 days and are flat. "
+                 "no signal when the EMAs have been tangled within 0.2% for 40 days and are flat. "
                  "Stocks: S&P 500 / 400 / 600 members of the sector (GICS), $2M+ daily dollar volume, ranked by volume of the last 10 sessions "
                  "vs the 50 before (shown as 1.8x vol). 'same sector' = the sub-industry has fewer than 5 such stocks, filled from its sector. "
                  "Not investment advice.</p></div>")

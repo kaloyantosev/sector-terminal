@@ -7,7 +7,7 @@
 // or the stop loss if it was hit first, averaged over every signal on this chart.
 indicator("EMA 200/300 HA cross: longs & shorts", overlay = true, max_labels_count = 500)
 
-flatGap = input.float(1.0, "Flat filter: EMA gap under %", step = 0.25) / 100
+flatGap = input.float(0.2, "Flat filter: EMA gap under %", step = 0.05) / 100
 flatSlope = input.float(2.0, "Flat filter: EMA 200 moved under % in 20 days", step = 0.5) / 100
 flatDays = input.int(40, "Flat filter: EMAs tangled for at least N days", minval = 1)
 baseBuf = input.float(2.0, "Stop: base buffer %", step = 0.5) / 100
