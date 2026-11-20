@@ -6,7 +6,7 @@
 // is above both. Short: the mirror. No signal when the EMAs are flat and have been tangled for 40+ days (see inputs).
 // TD Sequential counts on the real candles: setup 1-9 next to the candles, countdown 1-13 further out
 // (countdown numbers are labels, so only the last 500 show: TradingView's label limit).
-indicator("EMA 200/300 HA cross: longs & shorts", overlay = true, max_labels_count = 500)
+indicator("EMA 200/300 HA cross: longs & shorts", overlay = true, max_labels_count = 500, max_lines_count = 500)
 
 flatGap = input.float(0.2, "Flat filter: EMA gap under %", step = 0.05) / 100
 flatSlope = input.float(2.0, "Flat filter: EMA 200 moved under % in 20 days", step = 0.5) / 100
@@ -60,23 +60,61 @@ ss := c > c[4] ? ss + 1 : 0
 // Countdown starts on the setup's 9th candle. Candles need not be in a row: a buy countdown candle closes at or
 // below the low 2 candles earlier (sell: at or above the high 2 candles earlier). Candle 13 must also have its
 // low at or below the close of countdown candle 8 (sell: high at or above it); if not, 13 waits for a candle
-// that qualifies. A completed opposite setup (9) cancels the countdown. A new same-way 9 does not restart it.
+// that qualifies. A completed opposite setup (9) cancels the countdown.
+// Recycling (DeMark): a new same-way 9 during a countdown is compared by size (true high - true low of its
+// 9 candles) with the setup the countdown runs from. Size at least the old one but under 1.618x: the countdown
+// restarts from the new 9. 1.618x or more: the move is accelerating, the countdown is cancelled. Smaller: ignored.
+tH = math.max(h, nz(c[1], h))
+tL = math.min(l, nz(c[1], l))
+hi9 = ta.highest(tH, 9)
+lo9 = ta.lowest(tL, 9)
 var bool bAct = false
 var bool sAct = false
 var int bc = 0
 var int sc = 0
 var float b8 = na
 var float s8 = na
+var float bSize = na
+var float sSize = na
 if ss == 9
     bAct := false
 if bs == 9
     sAct := false
-if bs == 9 and not bAct
-    bAct := true
-    bc := 0
-if ss == 9 and not sAct
-    sAct := true
-    sc := 0
+if bs == 9
+    sz = hi9 - lo9
+    if not bAct or (sz >= bSize and sz < 1.618 * bSize)
+        bAct := true
+        bc := 0
+        b8 := na
+        bSize := sz
+    else if sz >= 1.618 * bSize
+        bAct := false
+if ss == 9
+    sz = hi9 - lo9
+    if not sAct or (sz >= sSize and sz < 1.618 * sSize)
+        sAct := true
+        sc := 0
+        s8 := na
+        sSize := sz
+    else if sz >= 1.618 * sSize
+        sAct := false
+
+// TDST: buy setup = highest true high of its 9 candles (resistance), sell setup = lowest true low (support).
+// The line runs right until a close breaks it or a new setup the same way replaces it.
+var line bT = na
+var line sT = na
+if not na(bT)
+    line.set_x2(bT, bar_index)
+    if c > line.get_y1(bT)
+        bT := na
+if not na(sT)
+    line.set_x2(sT, bar_index)
+    if c < line.get_y1(sT)
+        sT := na
+if bs == 9
+    bT := line.new(bar_index - 8, hi9, bar_index, hi9, color = color.new(color.lime, 65), style = line.style_dashed, width = 1)
+if ss == 9
+    sT := line.new(bar_index - 8, lo9, bar_index, lo9, color = color.new(color.red, 65), style = line.style_dashed, width = 1)
 bShow = 0
 sShow = 0
 if bAct and c <= l[2] and (bc < 12 or l <= b8)
