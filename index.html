@@ -51,7 +51,7 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
 .fgroup { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; font-size:13px; }
 .flabel { flex-basis:100%; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
 .console select, .console input[type=number], .console input[type=search] { border:1px solid var(--line); background:var(--bg); color:var(--fg); padding:5px 8px; border-radius:6px; font:inherit; }
-.console input[type=checkbox] { accent-color:var(--accent); }
+.console input[type=checkbox], .console input[type=radio] { accent-color:var(--accent); }
 #scrTbl th[data-k] { cursor:pointer; user-select:none; }
 #scrTbl th[data-k]:focus-visible, .console :focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 #scrTbl td:nth-child(-n+4), #scrTbl th:nth-child(-n+4) { text-align:left; }
@@ -77,13 +77,15 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
       <div class="fgroup"><span class="flabel">Timeframe</span>
         <div class="tabs" id="tfTabs"><button data-tf="D" class="on">Daily</button> <button data-tf="W">Weekly</button> <button data-tf="M">Monthly</button></div></div>
       <div class="fgroup"><span class="flabel">Heikin Ashi close vs EMA 200 / 300</span>
-        <label><input type="checkbox" name="pos" value="A" checked> Above both</label>
-        <label><input type="checkbox" name="pos" value="B" checked> Below both</label>
-        <label><input type="checkbox" name="pos" value="2" checked> Below EMA 200 only</label>
-        <label><input type="checkbox" name="pos" value="3" checked> Below EMA 300 only</label></div>
+        <label><input type="radio" name="pos" value="" checked> Any</label>
+        <label><input type="radio" name="pos" value="A"> Above both</label>
+        <label><input type="radio" name="pos" value="B"> Below both</label>
+        <label><input type="radio" name="pos" value="3"> Above EMA 200 only (below 300)</label>
+        <label><input type="radio" name="pos" value="2"> Above EMA 300 only (below 200)</label></div>
       <div class="fgroup"><label class="flabel" for="fSig">Last signal</label>
         <select id="fSig"><option value="">Any</option><option value="long">Long</option><option value="short">Short</option></select>
-        <label for="fAgo">within</label> <input id="fAgo" type="number" min="0" placeholder="any" style="width:72px"> <span class="muted">candles</span></div>
+        <label for="fAgo">within</label> <input id="fAgo" type="number" min="0" placeholder="any" style="width:72px">
+        <span class="tabs" id="agoUnit" role="group" aria-label="Unit"><button data-u="D" class="on">days</button> <button data-u="W">weeks</button> <button data-u="M">months</button></span></div>
       <div class="fgroup"><label class="flabel" for="fArm">Armed (broke through both lines, entry not yet given)</label>
         <select id="fArm"><option value="">Any</option><option value="L">Long armed</option><option value="S">Short armed</option></select>
         <label><input type="checkbox" id="fFlat"> Hide flat / tangled EMAs</label></div>
