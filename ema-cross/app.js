@@ -6,8 +6,6 @@ let S, chart, current, tab = "chart", dir = "long", EV = [], byWeek = new Map(),
 let SCR = [], tf = "D", chartTf = "D", sortK = "ago", sortDir = 1, agoUnit = "D";
 const rawCache = {};
 const TF_NAME = { D: "daily", W: "weekly", M: "monthly" }, TF_UNIT = { D: "d", W: "w", M: "mo" };
-// "2": HA close below EMA 200 but not EMA 300; "3": below EMA 300 but not EMA 200 (codes from build.mjs)
-const POS = { A: "Above both", B: "Below both", "3": "Above EMA 200 only", "2": "Above EMA 300 only" };
 const daysAgo = (x) => x.last ? Math.round((Date.parse(x.asOf) - Date.parse(x.last.date)) / 864e5) : null;  // calendar days to the data's last session
 function cutoff(asOf, n, unit) {  // earliest signal date that counts as "within n days / weeks / months"
   const t = new Date(asOf + "T00:00:00Z");
@@ -28,8 +26,8 @@ function screenRows() {
     && (!arm || (arm === "L" ? x.aL : x.aS)) && (!noFlat || !x.flat) && (!cat || s.category === cat)
     && (!q || `${s.tv} ${s.name}`.toLowerCase().includes(q)));
 }
-const SORT = { sym: (r) => r.s.tv || r.s.file, name: (r) => r.s.name, cat: (r) => r.s.category, pos: (r) => POS[r.x.pos], st: (r) => r.x.st,
-  gap: (r) => r.x.gap, sig: (r) => r.x.last?.dir ?? null, ago: (r) => daysAgo(r.x), arm: (r) => (r.x.aL ? "long" : "") + (r.x.aS ? "short" : "") || null };
+const SORT = { sym: (r) => r.s.tv || r.s.file, name: (r) => r.s.name, st: (r) => r.x.st,
+  sig: (r) => r.x.last?.dir ?? null, ago: (r) => daysAgo(r.x), arm: (r) => (r.x.aL ? "long" : "") + (r.x.aS ? "short" : "") || null };
 function renderScreener() {
   const rows = screenRows(), f = SORT[sortK];
   rows.sort((a, b) => { const p = f(a), q = f(b); return p === q ? 0 : p === null ? 1 : q === null ? -1 : (p < q ? -1 : 1) * sortDir; });  // blanks last
@@ -37,13 +35,12 @@ function renderScreener() {
   $("fCount").textContent = `${rows.length} of ${S.symbols.length} indexes on ${TF_NAME[tf]} candles` +
     (missing ? ` · ${missing} not shown: too little history for an EMA 300 on ${TF_NAME[tf]} candles` : "");
   const th = (k, t) => `<th data-k="${k}" tabindex="0" aria-sort="${sortK === k ? (sortDir > 0 ? "ascending" : "descending") : "none"}">${t}${sortK === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`;
-  $("scrTbl").innerHTML = `<tr>${th("sym", "Symbol")}${th("name", "Name")}${th("cat", "Category")}${th("pos", "vs EMAs")}${th("st", "Stretch vs EMA 200")}` +
-    `${th("gap", "EMA gap")}${th("sig", "Last signal")}<th>Signal date</th>${th("ago", "Days ago")}${th("arm", "Armed")}<th>Flat</th></tr>` +
-    (rows.length ? rows.map(({ s, x }) => `<tr data-f="${s.file}" title="Open ${TF_NAME[tf]} chart"><td><b>${s.tv || s.file}</b></td><td>${s.name}</td><td>${s.category}</td>` +
-      `<td class="${x.pos === "A" ? "pos" : x.pos === "B" ? "neg" : ""}">${POS[x.pos]}</td><td>${pct(x.st, 1)}</td><td>${x.gap.toFixed(2)}%</td>` +
+  $("scrTbl").innerHTML = `<tr>${th("sym", "Symbol")}${th("name", "Name")}${th("st", "Stretch vs EMA 200")}` +
+    `${th("sig", "Last signal")}<th>Signal date</th>${th("ago", "Days ago")}${th("arm", "Armed")}<th>Flat</th></tr>` +
+    (rows.length ? rows.map(({ s, x }) => `<tr data-f="${s.file}" title="Open ${TF_NAME[tf]} chart"><td><b>${s.tv || s.file}</b></td><td>${s.name}</td><td>${pct(x.st, 1)}</td>` +
       `<td class="${x.last?.dir === "long" ? "pos" : "neg"}">${x.last ? x.last.dir : "–"}</td><td>${x.last ? x.last.date : "–"}</td><td>${x.last ? daysAgo(x) : "–"}</td>` +
       `<td>${[x.aL ? "long" : "", x.aS ? "short" : ""].filter(Boolean).join(", ") || "–"}</td><td>${x.flat ? "yes" : ""}</td></tr>`).join("")
-      : `<tr><td class="muted" colspan="11">No index matches these filters.</td></tr>`);
+      : `<tr><td class="muted" colspan="8">No index matches these filters.</td></tr>`);
 }
 function setChartTf(t) {
   chartTf = t;

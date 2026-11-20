@@ -1,10 +1,13 @@
 name: Refresh price data
 
-# Weekly, after the US market close on Friday (UTC Saturday morning).
+# Every weekday session: Tuesday to Saturday 06:00 UTC, after each US close (Monday to Friday).
+# "Run workflow" on the Actions page (linked from the site's Refresh button) runs it now.
 on:
   schedule:
-    - cron: '0 6 * * 6'
+    - cron: '0 6 * * 2-6'
   workflow_dispatch:
+
+concurrency: refresh-data  # a manual run and the scheduled one never push at the same time
 
 permissions:
   contents: write
