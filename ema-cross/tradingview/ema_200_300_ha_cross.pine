@@ -64,10 +64,15 @@ ss := c > c[4] ? ss + 1 : 0
 // Recycling (DeMark): a new same-way 9 during a countdown is compared by size (true high - true low of its
 // 9 candles) with the setup the countdown runs from. Size at least the old one but under 1.618x: the countdown
 // restarts from the new 9. 1.618x or more: the move is accelerating, the countdown is cancelled. Smaller: ignored.
+// A setup that runs on to 18 candles in a row counts as a new setup (its last 9 candles) for this rule.
+// Range exit (DeMark): a buy countdown is cancelled when a candle's true low is above the true high of the buy
+// setup it runs from (price left the setup's range upward); a sell countdown when a true high is under its true low.
 tH = math.max(h, nz(c[1], h))
 tL = math.min(l, nz(c[1], l))
 hi9 = ta.highest(tH, 9)
 lo9 = ta.lowest(tL, 9)
+bNew = bs == 9 or bs == 18
+sNew = ss == 9 or ss == 18
 var bool bAct = false
 var bool sAct = false
 var int bc = 0
@@ -76,28 +81,56 @@ var float b8 = na
 var float s8 = na
 var float bSize = na
 var float sSize = na
+var float bHi = na
+var float sLo = na
 if ss == 9
     bAct := false
 if bs == 9
     sAct := false
-if bs == 9
+if bNew
     sz = hi9 - lo9
     if not bAct or (sz >= bSize and sz < 1.618 * bSize)
         bAct := true
         bc := 0
         b8 := na
         bSize := sz
+        bHi := hi9
     else if sz >= 1.618 * bSize
         bAct := false
-if ss == 9
+if sNew
     sz = hi9 - lo9
     if not sAct or (sz >= sSize and sz < 1.618 * sSize)
         sAct := true
         sc := 0
         s8 := na
         sSize := sz
+        sLo := lo9
     else if sz >= 1.618 * sSize
         sAct := false
+if bAct and tL > bHi
+    bAct := false
+if sAct and tH < sLo
+    sAct := false
+
+// Perfection: a buy 9 is perfected when the low of candle 8 or 9 is at or below the lows of candles 6 and 7
+// (sell: high of 8 or 9 at or above the highs of 6 and 7). Perfected 9 = bright; not yet = faded 9, and a small
+// "P" marks the later candle that reaches that level (until the next setup the same way or the opposite 9).
+bPerf = bs == 9 and math.min(l, l[1]) <= math.min(l[2], l[3])
+sPerf = ss == 9 and math.max(h, h[1]) >= math.max(h[2], h[3])
+var float bPLv = na
+var float sPLv = na
+bP = not na(bPLv) and bs != 9 and l <= bPLv
+sP = not na(sPLv) and ss != 9 and h >= sPLv
+if bP or ss == 9
+    bPLv := na
+if sP or bs == 9
+    sPLv := na
+if bs == 9
+    bPLv := bPerf ? na : math.min(l[2], l[3])
+if ss == 9
+    sPLv := sPerf ? na : math.max(h[2], h[3])
+plotshape(bP, "Buy 9 perfected later", shape.circle, location.belowbar, color.new(color.white, 100), text = "P", textcolor = color.new(color.lime, 30), size = size.tiny)
+plotshape(sP, "Sell 9 perfected later", shape.circle, location.abovebar, color.new(color.white, 100), text = "P", textcolor = color.new(color.red, 30), size = size.tiny)
 
 // TDST: buy setup = highest true high of its 9 candles (resistance), sell setup = lowest true low (support).
 // The line runs right until a close breaks it or a new setup the same way replaces it.
@@ -142,7 +175,8 @@ plotshape(bs == 5, "Buy setup 5", shape.circle, location.belowbar, nc, text = "5
 plotshape(bs == 6, "Buy setup 6", shape.circle, location.belowbar, nc, text = "6", textcolor = color.lime, size = size.tiny)
 plotshape(bs == 7, "Buy setup 7", shape.circle, location.belowbar, nc, text = "7", textcolor = color.lime, size = size.tiny)
 plotshape(bs == 8, "Buy setup 8", shape.circle, location.belowbar, nc, text = "8", textcolor = color.lime, size = size.tiny)
-plotshape(bs == 9, "Buy setup 9", shape.circle, location.belowbar, nc, text = "9", textcolor = color.lime, size = size.small)
+plotshape(bPerf, "Buy setup 9 perfected", shape.circle, location.belowbar, nc, text = "9", textcolor = color.lime, size = size.small)
+plotshape(bs == 9 and not bPerf, "Buy setup 9 not perfected", shape.circle, location.belowbar, nc, text = "9", textcolor = color.new(color.lime, 55), size = size.small)
 plotshape(ss == 1, "Sell setup 1", shape.circle, location.abovebar, nc, text = "1", textcolor = color.red, size = size.tiny)
 plotshape(ss == 2, "Sell setup 2", shape.circle, location.abovebar, nc, text = "2", textcolor = color.red, size = size.tiny)
 plotshape(ss == 3, "Sell setup 3", shape.circle, location.abovebar, nc, text = "3", textcolor = color.red, size = size.tiny)
@@ -151,4 +185,5 @@ plotshape(ss == 5, "Sell setup 5", shape.circle, location.abovebar, nc, text = "
 plotshape(ss == 6, "Sell setup 6", shape.circle, location.abovebar, nc, text = "6", textcolor = color.red, size = size.tiny)
 plotshape(ss == 7, "Sell setup 7", shape.circle, location.abovebar, nc, text = "7", textcolor = color.red, size = size.tiny)
 plotshape(ss == 8, "Sell setup 8", shape.circle, location.abovebar, nc, text = "8", textcolor = color.red, size = size.tiny)
-plotshape(ss == 9, "Sell setup 9", shape.circle, location.abovebar, nc, text = "9", textcolor = color.red, size = size.small)
+plotshape(sPerf, "Sell setup 9 perfected", shape.circle, location.abovebar, nc, text = "9", textcolor = color.red, size = size.small)
+plotshape(ss == 9 and not sPerf, "Sell setup 9 not perfected", shape.circle, location.abovebar, nc, text = "9", textcolor = color.new(color.red, 55), size = size.small)
