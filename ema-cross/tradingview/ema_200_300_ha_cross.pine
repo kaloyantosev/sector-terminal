@@ -15,6 +15,7 @@ baseBuf = input.float(2.0, "Stop: base buffer %", step = 0.5) / 100
 gapMult = input.float(1.0, "Stop: buffer x EMA gap", step = 0.25)
 
 adjDiv = input.bool(true, "Dividend-adjusted prices (set the same as the chart's ADJ button)")
+demLen = input.int(14, "DeMarker length", minval = 1)
 
 // Standard candles of this symbol with the chosen adjustment. ticker.standard() would drop the chart's
 // dividend adjustment, so the EMAs drifted away from an adjusted chart further back in time.
@@ -118,6 +119,17 @@ if sig
 
 plot(e200, "EMA 200 (HA close)", color.orange, 2)
 plot(e300, "EMA 300 (HA close)", color.purple, 2)
+
+// DeMarker (Tom DeMark), on the real candles: DeMax = rise of the high vs the previous high (else 0),
+// DeMin = fall of the low vs the previous low (else 0). DeM = SMA(DeMax) / (SMA(DeMax) + SMA(DeMin)), 0 to 1.
+// Over 0.7 = overbought (buyers exhausted), under 0.3 = oversold. Shown as a number only (status line and
+// data window), so it does not squash the price scale.
+deMax = h > h[1] ? h - h[1] : 0.0
+deMin = l < l[1] ? l[1] - l : 0.0
+sMax = ta.sma(deMax, demLen)
+sMin = ta.sma(deMin, demLen)
+dem = sMax + sMin > 0 ? sMax / (sMax + sMin) : 0.5
+plot(dem, "DeMarker", dem > 0.7 ? color.red : dem < 0.3 ? color.green : color.gray, display = display.status_line + display.data_window)
 plotshape(sig and side == 1, "Long", shape.triangleup, location.belowbar, color.green, size = size.small)
 plotshape(sig and side == -1, "Short", shape.triangledown, location.abovebar, color.red, size = size.small)
 plotshape(stopHitL, "Long stopped", shape.circle, location.belowbar, color.gray, size = size.tiny)
