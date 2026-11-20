@@ -4,7 +4,8 @@
 // Keep the "Dividend-adjusted" input the same as the chart's ADJ button, or the lines sit off the candles.
 // Long: the HA candle broke below both EMAs (part of the HA body under both counts), then the whole HA body
 // is above both. Short: the mirror. No signal when the EMAs are flat and have been tangled for 40+ days (see inputs).
-// The DeMarker value is written under every candle (the last 500 candles: TradingView's label limit).
+// TD Sequential counts on the real candles: setup 1-9 next to the candles, countdown 1-13 further out
+// (countdown numbers are labels, so only the last 500 show: TradingView's label limit).
 indicator("EMA 200/300 HA cross: longs & shorts", overlay = true, max_labels_count = 500)
 
 flatGap = input.float(0.2, "Flat filter: EMA gap under %", step = 0.05) / 100
@@ -12,8 +13,6 @@ flatSlope = input.float(2.0, "Flat filter: EMA 200 moved under % in 20 days", st
 flatDays = input.int(40, "Flat filter: EMAs tangled for at least N days", minval = 1)
 
 adjDiv = input.bool(true, "Dividend-adjusted prices (set the same as the chart's ADJ button)")
-demLen = input.int(14, "DeMarker length", minval = 1)
-
 // Standard candles of this symbol with the chosen adjustment. ticker.standard() would drop the chart's
 // dividend adjustment, so the EMAs drifted away from an adjusted chart further back in time.
 src = ticker.new(syminfo.prefix, syminfo.ticker, syminfo.session, adjDiv ? adjustment.dividends : adjustment.splits)
@@ -50,15 +49,68 @@ plot(e300, "EMA 300 (HA close)", color.purple, 2)
 plotshape(sig and side == 1, "Long", shape.triangleup, location.belowbar, color.green, size = size.small)
 plotshape(sig and side == -1, "Short", shape.triangledown, location.abovebar, color.red, size = size.small)
 
-// DeMarker (Tom DeMark), on the real candles: DeMax = rise of the high vs the previous high (else 0),
-// DeMin = fall of the low vs the previous low (else 0). DeM = SMA(DeMax) / (SMA(DeMax) + SMA(DeMin)), 0 to 1.
-// Over 0.7 = overbought (red), under 0.3 = oversold (green).
-deMax = h > h[1] ? h - h[1] : 0.0
-deMin = l < l[1] ? l[1] - l : 0.0
-sMax = ta.sma(deMax, demLen)
-sMin = ta.sma(deMin, demLen)
-dem = sMax + sMin > 0 ? sMax / (sMax + sMin) : 0.5
-demCol = dem > 0.7 ? color.red : dem < 0.3 ? color.lime : color.gray
-plot(dem, "DeMarker", demCol, display = display.status_line + display.data_window)
-if not na(dem)
-    label.new(bar_index, l, str.tostring(dem, "0.00"), yloc = yloc.belowbar, style = label.style_none, textcolor = demCol, size = size.tiny)
+// ---- TD Sequential (Tom DeMark), on the real candles
+// Setup: 9 closes in a row each below the close 4 bars earlier = buy setup (green 1-9 under the candles);
+// 9 closes in a row each above the close 4 bars earlier = sell setup (red 1-9 over the candles).
+// A close that breaks the run resets the count to 0, so count 1 always starts right after a price flip.
+var int bs = 0
+var int ss = 0
+bs := c < c[4] ? bs + 1 : 0
+ss := c > c[4] ? ss + 1 : 0
+// Countdown starts on the setup's 9th candle. Candles need not be in a row: a buy countdown candle closes at or
+// below the low 2 candles earlier (sell: at or above the high 2 candles earlier). Candle 13 must also have its
+// low at or below the close of countdown candle 8 (sell: high at or above it); if not, 13 waits for a candle
+// that qualifies. A completed opposite setup (9) cancels the countdown. A new same-way 9 does not restart it.
+var bool bAct = false
+var bool sAct = false
+var int bc = 0
+var int sc = 0
+var float b8 = na
+var float s8 = na
+if ss == 9
+    bAct := false
+if bs == 9
+    sAct := false
+if bs == 9 and not bAct
+    bAct := true
+    bc := 0
+if ss == 9 and not sAct
+    sAct := true
+    sc := 0
+bShow = 0
+sShow = 0
+if bAct and c <= l[2] and (bc < 12 or l <= b8)
+    bc += 1
+    bShow := bc
+    b8 := bc == 8 ? c : b8
+    bAct := bc < 13
+if sAct and c >= h[2] and (sc < 12 or h >= s8)
+    sc += 1
+    sShow := sc
+    s8 := sc == 8 ? c : s8
+    sAct := sc < 13
+// countdown numbers sit further from the candle than setup numbers (the newlines push them out)
+if bShow > 0
+    label.new(bar_index, l, "\n\n" + str.tostring(bShow), yloc = yloc.belowbar, style = label.style_none, textcolor = bShow == 13 ? color.yellow : color.orange, size = bShow == 13 ? size.normal : size.tiny)
+if sShow > 0
+    label.new(bar_index, h, str.tostring(sShow) + "\n\n", yloc = yloc.abovebar, style = label.style_none, textcolor = sShow == 13 ? color.yellow : color.fuchsia, size = sShow == 13 ? size.normal : size.tiny)
+
+nc = color.new(color.white, 100)  // invisible shape, only its text shows
+plotshape(bs == 1, "Buy setup 1", shape.circle, location.belowbar, nc, text = "1", textcolor = color.lime, size = size.tiny)
+plotshape(bs == 2, "Buy setup 2", shape.circle, location.belowbar, nc, text = "2", textcolor = color.lime, size = size.tiny)
+plotshape(bs == 3, "Buy setup 3", shape.circle, location.belowbar, nc, text = "3", textcolor = color.lime, size = size.tiny)
+plotshape(bs == 4, "Buy setup 4", shape.circle, location.belowbar, nc, text = "4", textcolor = color.lime, size = size.tiny)
+plotshape(bs == 5, "Buy setup 5", shape.circle, location.belowbar, nc, text = "5", textcolor = color.lime, size = size.tiny)
+plotshape(bs == 6, "Buy setup 6", shape.circle, location.belowbar, nc, text = "6", textcolor = color.lime, size = size.tiny)
+plotshape(bs == 7, "Buy setup 7", shape.circle, location.belowbar, nc, text = "7", textcolor = color.lime, size = size.tiny)
+plotshape(bs == 8, "Buy setup 8", shape.circle, location.belowbar, nc, text = "8", textcolor = color.lime, size = size.tiny)
+plotshape(bs == 9, "Buy setup 9", shape.circle, location.belowbar, nc, text = "9", textcolor = color.lime, size = size.small)
+plotshape(ss == 1, "Sell setup 1", shape.circle, location.abovebar, nc, text = "1", textcolor = color.red, size = size.tiny)
+plotshape(ss == 2, "Sell setup 2", shape.circle, location.abovebar, nc, text = "2", textcolor = color.red, size = size.tiny)
+plotshape(ss == 3, "Sell setup 3", shape.circle, location.abovebar, nc, text = "3", textcolor = color.red, size = size.tiny)
+plotshape(ss == 4, "Sell setup 4", shape.circle, location.abovebar, nc, text = "4", textcolor = color.red, size = size.tiny)
+plotshape(ss == 5, "Sell setup 5", shape.circle, location.abovebar, nc, text = "5", textcolor = color.red, size = size.tiny)
+plotshape(ss == 6, "Sell setup 6", shape.circle, location.abovebar, nc, text = "6", textcolor = color.red, size = size.tiny)
+plotshape(ss == 7, "Sell setup 7", shape.circle, location.abovebar, nc, text = "7", textcolor = color.red, size = size.tiny)
+plotshape(ss == 8, "Sell setup 8", shape.circle, location.abovebar, nc, text = "8", textcolor = color.red, size = size.tiny)
+plotshape(ss == 9, "Sell setup 9", shape.circle, location.abovebar, nc, text = "9", textcolor = color.red, size = size.small)
