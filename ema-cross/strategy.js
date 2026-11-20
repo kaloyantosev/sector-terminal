@@ -36,14 +36,14 @@ function runStrategy(d, baseBuf = 0.02, gapMult = 1.0, flatGap = 0.002, flatSlop
   // part of the HA body past both lines = a break; it arms the entry the other way
   const brokeDn = (i) => lo(i) < e200[i] && lo(i) < e300[i], brokeUp = (i) => hi(i) > e200[i] && hi(i) > e300[i];
   const events = [];
-  let armLong = brokeDn(WARMUP), armShort = brokeUp(WARMUP);
+  let armLong = brokeDn(WARMUP), armShort = brokeUp(WARMUP), tangled = false;
   for (let i = WARMUP + 1; i < c.length; i++) {
     const s = side(i);
     const fire = (s === 1 && armLong) || (s === -1 && armShort);
     if (fire && s === 1) armLong = false;
     if (fire && s === -1) armShort = false;
     armLong = armLong || brokeDn(i); armShort = armShort || brokeUp(i);
-    let tangled = Math.abs(e200[i] / e200[i - 20] - 1) < flatSlope;
+    tangled = Math.abs(e200[i] / e200[i - 20] - 1) < flatSlope;
     for (let k = i - flatDays; tangled && k <= i; k++) tangled = Math.abs(e200[k] - e300[k]) / Math.min(e200[k], e300[k]) < flatGap;
     if (fire && !tangled) {
       const long = s === 1, entry = c[i];
@@ -64,7 +64,28 @@ function runStrategy(d, baseBuf = 0.02, gapMult = 1.0, flatGap = 0.002, flatSlop
       events.push(ev);
     }
   }
-  return { e200, e300, hc, ho, events };
+  // armLong/armShort/tangled: state after the last candle (a long or short is armed and waiting; flat filter on)
+  return { e200, e300, hc, ho, events, armLong, armShort, tangled };
 }
 
-if (typeof module !== "undefined") module.exports = { runStrategy, HORIZONS, ema, haClose };
+// Weekly ("W": Monday to Friday) or monthly ("M") candles built from daily ones, each dated by its last day.
+// The last candle can still be forming (current week or month).
+function resample(d, tf) {
+  if (tf !== "W" && tf !== "M") return d;
+  const key = tf === "M" ? (ds) => ds.slice(0, 7) : (ds) => Math.floor((Date.parse(ds + "T00:00:00Z") / 864e5 + 3) / 7);
+  const x = { dates: [], open: [], high: [], low: [], close: [] };
+  let prev = null;
+  for (let i = 0; i < d.close.length; i++) {
+    const k = key(d.dates[i]), n = x.close.length - 1;
+    if (k !== prev) {
+      x.dates.push(d.dates[i]); x.open.push(d.open[i]); x.high.push(d.high[i]); x.low.push(d.low[i]); x.close.push(d.close[i]);
+      prev = k;
+    } else {
+      x.dates[n] = d.dates[i]; x.close[n] = d.close[i];
+      x.high[n] = Math.max(x.high[n], d.high[i]); x.low[n] = Math.min(x.low[n], d.low[i]);
+    }
+  }
+  return x;
+}
+
+if (typeof module !== "undefined") module.exports = { runStrategy, resample, HORIZONS, WARMUP, ema, haClose };

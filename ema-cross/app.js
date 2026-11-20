@@ -3,6 +3,42 @@ const H = Object.keys(HORIZONS);
 const $ = (id) => document.getElementById(id);
 const pct = (v, d = 2) => v == null || isNaN(v) ? "–" : `<span class="${v > 0 ? "pos" : v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v.toFixed(d)}%</span>`;
 let S, chart, current, tab = "chart", dir = "long", EV = [], byWeek = new Map(), calYear, calWeek;
+let SCR = [], tf = "D", chartTf = "D", sortK = "ago", sortDir = 1;
+const rawCache = {};
+const TF_NAME = { D: "daily", W: "weekly", M: "monthly" }, TF_UNIT = { D: "d", W: "w", M: "mo" };
+const POS = { A: "Above both", B: "Below both", "2": "Below EMA 200 only", "3": "Below EMA 300 only" };
+
+// ---- filter console: every index's current state on the chosen timeframe (screener.json from build.mjs)
+function screenRows() {
+  const pos = new Set([...document.querySelectorAll("input[name=pos]:checked")].map((x) => x.value));
+  const sig = $("fSig").value, agoTxt = $("fAgo").value, ago = agoTxt === "" ? null : +agoTxt;
+  const arm = $("fArm").value, cat = $("fCat").value, q = $("fq").value.trim().toLowerCase(), noFlat = $("fFlat").checked;
+  return S.symbols.map((s, i) => ({ s, x: SCR[i][tf] })).filter(({ s, x }) => x && pos.has(x.pos)
+    && (!sig || (x.last && x.last.dir === sig)) && (ago === null || (x.last && x.last.ago <= ago))
+    && (!arm || (arm === "L" ? x.aL : x.aS)) && (!noFlat || !x.flat) && (!cat || s.category === cat)
+    && (!q || `${s.tv} ${s.name}`.toLowerCase().includes(q)));
+}
+const SORT = { sym: (r) => r.s.tv || r.s.file, name: (r) => r.s.name, cat: (r) => r.s.category, pos: (r) => POS[r.x.pos], st: (r) => r.x.st,
+  gap: (r) => r.x.gap, sig: (r) => r.x.last?.dir ?? null, ago: (r) => r.x.last?.ago ?? null, arm: (r) => (r.x.aL ? "long" : "") + (r.x.aS ? "short" : "") || null };
+function renderScreener() {
+  const rows = screenRows(), f = SORT[sortK];
+  rows.sort((a, b) => { const p = f(a), q = f(b); return p === q ? 0 : p === null ? 1 : q === null ? -1 : (p < q ? -1 : 1) * sortDir; });  // blanks last
+  const missing = SCR.filter((x) => !x[tf]).length;
+  $("fCount").textContent = `${rows.length} of ${S.symbols.length} indexes on ${TF_NAME[tf]} candles` +
+    (missing ? ` · ${missing} not shown: too little history for an EMA 300 on ${TF_NAME[tf]} candles` : "");
+  const th = (k, t) => `<th data-k="${k}" tabindex="0" aria-sort="${sortK === k ? (sortDir > 0 ? "ascending" : "descending") : "none"}">${t}${sortK === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`;
+  $("scrTbl").innerHTML = `<tr>${th("sym", "Symbol")}${th("name", "Name")}${th("cat", "Category")}${th("pos", "vs EMAs")}${th("st", "Stretch vs EMA 200")}` +
+    `${th("gap", "EMA gap")}${th("sig", "Last signal")}<th>Signal date</th>${th("ago", "Candles ago")}${th("arm", "Armed")}<th>Flat</th></tr>` +
+    (rows.length ? rows.map(({ s, x }) => `<tr data-f="${s.file}" title="Open ${TF_NAME[tf]} chart"><td><b>${s.tv || s.file}</b></td><td>${s.name}</td><td>${s.category}</td>` +
+      `<td class="${x.pos === "A" ? "pos" : x.pos === "B" ? "neg" : ""}">${POS[x.pos]}</td><td>${pct(x.st, 1)}</td><td>${x.gap.toFixed(2)}%</td>` +
+      `<td class="${x.last?.dir === "long" ? "pos" : "neg"}">${x.last ? x.last.dir : "–"}</td><td>${x.last ? x.last.date : "–"}</td><td>${x.last ? x.last.ago : "–"}</td>` +
+      `<td>${[x.aL ? "long" : "", x.aS ? "short" : ""].filter(Boolean).join(", ") || "–"}</td><td>${x.flat ? "yes" : ""}</td></tr>`).join("")
+      : `<tr><td class="muted" colspan="11">No index matches these filters.</td></tr>`);
+}
+function setChartTf(t) {
+  chartTf = t;
+  document.querySelectorAll("#chartTf button").forEach((b) => b.classList.toggle("on", b.dataset.ctf === t));
+}
 
 function horizonTable(rows) { // rows: [label, statsByHorizon]
   const head = `<tr><th></th>${H.map((h) => `<th colspan="1">${h}</th>`).join("")}</tr>`;
@@ -53,9 +89,13 @@ async function select(s) {
   $("symTbl").innerHTML = "";
   $("trades").innerHTML = "<tr><td>Loading prices…</td></tr>";
   showTV(s);
-  let d;
-  try { d = await (await fetch(DATA + s.file)).json(); } catch (e) { $("trades").innerHTML = `<tr><td>Could not load ${s.file}: ${e.message}</td></tr>`; return; }
+  try { rawCache[s.file] ??= await (await fetch(DATA + s.file)).json(); } catch (e) { $("trades").innerHTML = `<tr><td>Could not load ${s.file}: ${e.message}</td></tr>`; return; }
   if (current !== s) return;
+  drawSymbol(s);
+}
+
+function drawSymbol(s) {
+  const d = resample(rawCache[s.file], chartTf), daily = chartTf === "D", unit = TF_UNIT[chartTf];
   const r = runStrategy(d), c = ensureChart();
   const symStats = (ev) => { const h = {};
   for (const [k, n] of Object.entries(HORIZONS)) {
@@ -65,7 +105,9 @@ async function select(s) {
   }
   return [`${ev[0]?.dir === "short" ? "Shorts" : "Longs"}: ${ev.length} signals, ${(ev.filter((e) => e.stopDay !== null).length / (ev.length || 1) * 100).toFixed(1)}% ever stopped`, h]; };
   const L = r.events.filter((e) => e.dir === "long"), Sh = r.events.filter((e) => e.dir === "short");
-  $("symTbl").innerHTML = horizonTable([symStats(L), symStats(Sh)]).replace("Longs: undefined", "Longs").replace("Shorts: undefined", "Shorts");
+  // return columns are in trading days, so only meaningful on daily candles
+  $("symTbl").innerHTML = daily ? horizonTable([symStats(L), symStats(Sh)]).replace("Longs: undefined", "Longs").replace("Shorts: undefined", "Shorts")
+    : `<tr><td class="muted">${TF_NAME[chartTf][0].toUpperCase() + TF_NAME[chartTf].slice(1)} candles: ${L.length} long and ${Sh.length} short signals. Return columns are shown on daily candles only.</td></tr>`;
   const pts = (arr) => d.dates.map((t, i) => ({ time: t, value: arr[i] }));
   c.price.setData(d.dates.map((t, i) => ({ time: t, open: r.ho[i], close: r.hc[i], // Heikin Ashi candles: what the decisions use
     high: Math.max(d.high[i], r.ho[i], r.hc[i]), low: Math.min(d.low[i], r.ho[i], r.hc[i]) })));
@@ -80,9 +122,10 @@ async function select(s) {
   const seen = new Set();
   c.price.setMarkers(marks.sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0).filter((m) => { const k = m.time + m.shape + m.position; return !seen.has(k) && seen.add(k); }));
   c.timeScale().fitContent();
-  $("trades").innerHTML = `<tr><th>Entry date</th><th>Side</th><th>Entry</th><th>Stop</th><th>Risk</th><th>EMA gap</th><th>Stopped after</th>${H.map((h) => `<th>${h}</th>`).join("")}</tr>` +
+  const HC = daily ? H : [];
+  $("trades").innerHTML = `<tr><th>Entry date</th><th>Side</th><th>Entry</th><th>Stop</th><th>Risk</th><th>EMA gap</th><th>Stopped after</th>${HC.map((h) => `<th>${h}</th>`).join("")}</tr>` +
     r.events.slice().reverse().map((e) => `<tr><td>${e.date}</td><td class="${e.dir === "long" ? "pos" : "neg"}">${e.dir}</td><td>${e.entry.toFixed(2)}</td><td>${e.stop.toFixed(2)}</td><td>${(e.risk * 100).toFixed(1)}%</td><td>${(e.gap * 100).toFixed(2)}%</td>` +
-      `<td>${e.stopDay === null ? "open" : e.stopDay + " d"}</td>${H.map((h) => `<td>${e[h] == null ? "–" : pct(e[h] * 100, 1)}</td>`).join("")}</tr>`).join("");
+      `<td>${e.stopDay === null ? "open" : e.stopDay + " " + unit}</td>${HC.map((h) => `<td>${e[h] == null ? "–" : pct(e[h] * 100, 1)}</td>`).join("")}</tr>`).join("");
 }
 
 // ---- signal calendar: one button per ISO week, click shows every signal that week
@@ -136,7 +179,20 @@ function renderSummary() {
 }
 
 (async () => {
-  [S, EV] = await Promise.all([fetch("summary.json").then((r) => r.json()), fetch("events.json").then((r) => r.json())]);
+  [S, EV, SCR] = await Promise.all(["summary.json", "events.json", "screener.json"].map((f) => fetch(f).then((r) => r.json())));
+  $("fCat").innerHTML += [...new Set(S.symbols.map((s) => s.category))].sort().map((c) => `<option>${c}</option>`).join("");
+  renderScreener();
+  document.querySelector(".console").addEventListener("input", renderScreener);
+  $("tfTabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tf]"); if (!b) return; tf = b.dataset.tf;
+    document.querySelectorAll("#tfTabs button").forEach((x) => x.classList.toggle("on", x === b)); renderScreener(); });
+  const sortBy = (e) => { const t = e.target.closest("th[data-k]"); if (!t) return;
+    sortDir = sortK === t.dataset.k ? -sortDir : 1; sortK = t.dataset.k; renderScreener(); };
+  $("scrTbl").addEventListener("click", (e) => { if (e.target.closest("th[data-k]")) return sortBy(e);
+    const tr = e.target.closest("tr[data-f]"); if (!tr) return;
+    setChartTf(tf); select(S.symbols.find((s) => s.file === tr.dataset.f)); $("symTitle").scrollIntoView({ behavior: "smooth" }); });
+  $("scrTbl").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sortBy(e); } });
+  $("chartTf").addEventListener("click", (e) => { const b = e.target.closest("button[data-ctf]"); if (!b || !current) return;
+    setChartTf(b.dataset.ctf); if (rawCache[current.file]) drawSymbol(current); });
   for (const e of EV) { const k = isoWeek(e[0]).join("-"); if (!byWeek.has(k)) byWeek.set(k, []); byWeek.get(k).push(e); }
   [calYear, calWeek] = isoWeek(EV.at(-1)[0]);
   renderCal();

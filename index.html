@@ -47,6 +47,16 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
 .wk.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
 .wk:focus-visible, .calbar button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 #weekTbl td:nth-child(-n+4), #weekTbl th:nth-child(-n+4) { text-align:left; }
+.console { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px 18px; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; }
+.fgroup { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; font-size:13px; }
+.flabel { flex-basis:100%; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.console select, .console input[type=number], .console input[type=search] { border:1px solid var(--line); background:var(--bg); color:var(--fg); padding:5px 8px; border-radius:6px; font:inherit; }
+.console input[type=checkbox] { accent-color:var(--accent); }
+#scrTbl th[data-k] { cursor:pointer; user-select:none; }
+#scrTbl th[data-k]:focus-visible, .console :focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+#scrTbl td:nth-child(-n+4), #scrTbl th:nth-child(-n+4) { text-align:left; }
+#scrTbl tr[data-f] { cursor:pointer; }
+#scrTbl tr[data-f]:hover { background:var(--card); }
 #weekTbl tr[data-f] { cursor:pointer; }
 #weekTbl tr[data-f]:hover { background:var(--card); }
 </style>
@@ -62,10 +72,32 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
     <div id="list"></div>
   </aside>
   <section>
+    <h2 style="margin-top:0">Filter console</h2>
+    <div class="console" role="search" aria-label="Filter the indexes">
+      <div class="fgroup"><span class="flabel">Timeframe</span>
+        <div class="tabs" id="tfTabs"><button data-tf="D" class="on">Daily</button> <button data-tf="W">Weekly</button> <button data-tf="M">Monthly</button></div></div>
+      <div class="fgroup"><span class="flabel">Heikin Ashi close vs EMA 200 / 300</span>
+        <label><input type="checkbox" name="pos" value="A" checked> Above both</label>
+        <label><input type="checkbox" name="pos" value="B" checked> Below both</label>
+        <label><input type="checkbox" name="pos" value="2" checked> Below EMA 200 only</label>
+        <label><input type="checkbox" name="pos" value="3" checked> Below EMA 300 only</label></div>
+      <div class="fgroup"><label class="flabel" for="fSig">Last signal</label>
+        <select id="fSig"><option value="">Any</option><option value="long">Long</option><option value="short">Short</option></select>
+        <label for="fAgo">within</label> <input id="fAgo" type="number" min="0" placeholder="any" style="width:72px"> <span class="muted">candles</span></div>
+      <div class="fgroup"><label class="flabel" for="fArm">Armed (broke through both lines, entry not yet given)</label>
+        <select id="fArm"><option value="">Any</option><option value="L">Long armed</option><option value="S">Short armed</option></select>
+        <label><input type="checkbox" id="fFlat"> Hide flat / tangled EMAs</label></div>
+      <div class="fgroup"><label class="flabel" for="fCat">Category and search</label>
+        <select id="fCat"><option value="">All categories</option></select>
+        <input id="fq" type="search" placeholder="Symbol or name…" aria-label="Search symbol or name"></div>
+    </div>
+    <div class="muted" id="fCount" style="margin:8px 0 4px;font-size:13px" aria-live="polite"></div>
+    <div class="wrap" style="max-height:460px;overflow:auto"><table id="scrTbl"></table></div>
+    <h2>Rules</h2>
     <div class="box muted" style="font-size:13px">
       <b style="color:var(--fg)">Rules.</b> Daily Heikin Ashi candles, EMA 200 and EMA 300 on the HA close. <b style="color:var(--fg)">Long:</b> the HA candle broke below both lines, then the whole HA body (open and close) is above both; enter at that day's real close.
       <b style="color:var(--fg)">Short:</b> the mirror, from above both to below both. A one-candle cross of both lines counts. Part of the HA body past the second line counts as a break of it; a dip that never breaks the second line is not a signal.
-      No signal when the EMAs are flat and tangled: within 0.2% of each other today and for all of the previous 40 days, and the EMA 200 moved under 2% in 20 days. Lines that only meet briefly, as in a V-recovery, do not block a signal. Stops and returns use real prices. One index per industry (the one with the longest history), so XLV stands for all the health care funds.
+      No signal when the EMAs are flat and tangled: within 0.2% of each other today and for all of the previous 40 days, and the EMA 200 moved under 2% in 20 days. Lines that only meet briefly, as in a V-recovery, do not block a signal. Stops and returns use real prices. The filter console and the W / M chart buttons apply the same rules to weekly and monthly Heikin Ashi candles (EMA 200/300 of weekly or monthly closes). One index per industry (the one with the longest history), so XLV stands for all the health care funds.
       Stop = beyond the far line × (2% + EMA gap): lower EMA × (1 − buffer) for longs, upper EMA × (1 + buffer) for shorts. Fixed at entry, hit on the daily low (longs) or high (shorts).
       No exit rule: each column is the return if held that long, or the stop loss if hit first. Short returns are shown as the short's profit.
     </div>
@@ -81,7 +113,8 @@ th { font-weight:600; color:var(--muted); font-size:12px; }
     <h2 id="weekTitle" style="margin-top:14px">Week</h2>
     <div class="wrap" style="max-height:420px;overflow:auto"><table id="weekTbl"></table></div>
     <h2 id="symTitle">Symbol</h2>
-    <div class="tabs"><button data-t="chart" class="on">Signal chart</button> <button data-t="tv">TradingView</button> <a id="tvlink" target="_blank" rel="noopener" style="margin-left:8px">Open on TradingView ↗</a></div>
+    <div class="tabs"><button data-t="chart" class="on">Signal chart</button> <button data-t="tv">TradingView</button>
+      <span id="chartTf" style="margin-left:10px"><button data-ctf="D" class="on">D</button> <button data-ctf="W">W</button> <button data-ctf="M">M</button></span> <a id="tvlink" target="_blank" rel="noopener" style="margin-left:8px">Open on TradingView ↗</a></div>
     <div id="chart"></div><div id="tv" hidden></div>
     <div class="legend"><span>Heikin Ashi candles</span><span style="color:var(--e200)">━ EMA 200</span><span style="color:var(--e300)">━ EMA 300</span><span class="pos">▲ long entry</span><span class="neg">▼ short entry</span><span class="muted">● stop hit</span></div>
     <div class="wrap"><table id="symTbl"></table></div>
